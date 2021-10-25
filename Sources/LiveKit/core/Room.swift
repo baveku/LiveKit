@@ -17,7 +17,7 @@ public class Room: MulticastDelegate<RoomDelegate> {
 
     //    private let monitor: NWPathMonitor
     private let monitorQueue: DispatchQueue
-    private var prevPath: NWPath?
+//    private var prevPath: NWPath?
     private var lastPathUpdate: TimeInterval = 0
     internal let engine: Engine
     public var state: ConnectionState {

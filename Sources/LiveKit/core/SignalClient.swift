@@ -1,31 +1,29 @@
 import Foundation
 import Promises
 import WebRTC
+import Starscream
 
-internal class SignalClient: MulticastDelegate<SignalClientDelegate> {
+class SignalClient: MulticastDelegate<SignalClientDelegate> {
 
     // connection state of WebSocket
     private(set) var connectionState: ConnectionState = .disconnected()
 
-    private lazy var urlSession = URLSession(configuration: .default,
-                                             delegate: self,
-                                             delegateQueue: OperationQueue())
-
-    private var webSocket: URLSessionWebSocketTask?
-
+    private var webSocket: WebSocket?
     deinit {
-        urlSession.invalidateAndCancel()
+        webSocket?.forceDisconnect()
+        close()
     }
 
     func connect(options: ConnectOptions, reconnect: Bool = false) -> Promise<Void> {
 
         Promise<Void> { () -> Void in
             let rtcUrl = try options.buildUrl(reconnect: reconnect)
-            logger.debug("connecting with url: \(rtcUrl)")
-
-            self.webSocket?.cancel()
-            self.webSocket = self.urlSession.webSocketTask(with: rtcUrl)
-            self.webSocket!.resume() // Unexpectedly found nil while unwrapping an Optional values
+            logger.debug("open connect with url: \(rtcUrl)")
+            self.webSocket?.forceDisconnect()
+            let webSocket = WebSocket(request: .init(url: rtcUrl))
+            webSocket.delegate = self
+            webSocket.connect()
+            self.webSocket = webSocket
             self.connectionState = .connecting(isReconnecting: reconnect)
         }.then {
             self.waitForWebSocketConnected()
@@ -41,12 +39,7 @@ internal class SignalClient: MulticastDelegate<SignalClientDelegate> {
 
         do {
             let msg = try request.serializedData()
-            let message = URLSessionWebSocketTask.Message.data(msg)
-            webSocket?.send(message) { error in
-                if let error = error {
-                    logger.error("could not send message: \(error)")
-                }
-            }
+            webSocket?.write(data: msg)
         } catch {
             logger.error("could not serialize data: \(error)")
         }
@@ -54,7 +47,7 @@ internal class SignalClient: MulticastDelegate<SignalClientDelegate> {
 
     func close() {
         connectionState = .disconnected()
-        webSocket?.cancel()
+        webSocket?.forceDisconnect()
         webSocket = nil
     }
 
@@ -108,53 +101,6 @@ internal class SignalClient: MulticastDelegate<SignalClientDelegate> {
             logger.error("could not handle signal response: \(error)")
         }
     }
-
-    private func receiveNext() {
-        guard let webSocket = webSocket else {
-            logger.debug("webSocket is nil")
-            return
-        }
-        webSocket.receive(completionHandler: handleWebsocketMessage)
-    }
-
-    private func handleWebsocketMessage(result: Result<URLSessionWebSocketTask.Message, Error>) {
-        switch result {
-        case .failure(let error):
-            // cancel connection on failure
-            logger.error("could not receive websocket: \(error)")
-            handleError(error.localizedDescription)
-        case .success(let msg):
-            var response: Livekit_SignalResponse?
-            switch msg {
-            case .data(let data):
-                do {
-                    response = try Livekit_SignalResponse(contiguousBytes: data)
-                } catch {
-                    logger.error("could not decode protobuf message: \(error)")
-                    handleError(error.localizedDescription)
-                }
-            case .string(let text):
-                do {
-                    response = try Livekit_SignalResponse(jsonString: text)
-                } catch {
-                    logger.error("could not decode JSON message: \(error)")
-                    handleError(error.localizedDescription)
-                }
-            default:
-                return
-            }
-
-            if let sigResp = response, let msg = sigResp.message {
-                handleSignalResponse(msg: msg)
-            }
-
-            // queue up the next read
-            DispatchQueue.global(qos: .background).async {
-                self.receiveNext()
-            }
-        }
-    }
-
 }
 
 // MARK: Wait extension
@@ -308,58 +254,58 @@ extension SignalClient {
     }
 }
 
-// MARK: - URLSessionWebSocketDelegate
-
-extension SignalClient: URLSessionWebSocketDelegate {
-
-    func urlSession(_ session: URLSession,
-                    webSocketTask: URLSessionWebSocketTask,
-                    didOpenWithProtocol protocol: String?) {
-
-        guard webSocketTask == webSocket else {
-            return
+extension SignalClient: WebSocketDelegate {
+    func didReceive(event: WebSocketEvent, client: WebSocket) {
+        switch event {
+        case .connected(_):
+            connectionState = .connected
+            var delegate: SignalClientDelegateClosures?
+            delegate = SignalClientDelegateClosures(didReceiveJoinResponse: { _, joinResponse in
+                delegate = nil
+            })
+            // not required to clean up since weak reference
+            self.add(delegate: delegate!)
+        case .disconnected(let reason, let code):
+            let error = SignalClientError.socketError(reason, code)
+            connectionState = .disconnected(error)
+            notify { $0.signalClient(self, didFailConnection: error) }
+        case .text(let message):
+            handleReceiveMessage(text: message)
+        case .error(let error):
+            var realError: Error
+            if let error = error {
+                realError = error
+            } else {
+                realError = SignalClientError.socketError("could not connect", 0)
+            }
+            connectionState = .disconnected(realError)
+            notify { $0.signalClient(self, didFailConnection: realError) }
+        case .reconnectSuggested(let isConnecting):
+            if !isConnecting {
+                connectionState = .connected
+//                receiveNext()
+            } else {
+                connectionState = .connecting(isReconnecting: isConnecting)
+            }
+            notify { $0.signalClient(self, didConnect: isConnecting) }
+        case .cancelled:
+            connectionState = .disconnected(nil)
+            notify({$0.signalClient(self, didClose: "", code: 0)})
+        default:break
         }
-
-        var isReconnect = false
-        if case .connecting(let reconnecting) = connectionState, reconnecting {
-            isReconnect = true
-        }
-
-        notify { $0.signalClient(self, didConnect: isReconnect) }
-        connectionState = .connected
-        receiveNext()
     }
-
-    func urlSession(_ session: URLSession,
-                    webSocketTask: URLSessionWebSocketTask,
-                    didCloseWith closeCode: URLSessionWebSocketTask.CloseCode,
-                    reason: Data?) {
-
-        guard webSocketTask == webSocket else {
-            return
+    
+    func handleReceiveMessage(text: String) {
+        var response: Livekit_SignalResponse?
+        do {
+            response = try Livekit_SignalResponse(jsonString: text)
+        } catch {
+            logger.error("could not decode JSON message: \(error)")
+            handleError(error.localizedDescription)
         }
-
-        logger.debug("websocket disconnected")
-        connectionState = .disconnected()
-        notify { $0.signalClient(self, didClose: "", code: UInt16(closeCode.rawValue)) }
-    }
-
-    func urlSession(_ session: URLSession,
-                    task: URLSessionTask,
-                    didCompleteWithError error: Error?) {
-
-        guard task == webSocket else {
-            return
+        
+        if let sigResp = response, let msg = sigResp.message {
+            handleSignalResponse(msg: msg)
         }
-
-        var realError: Error
-        if error != nil {
-            realError = error!
-        } else {
-            realError = SignalClientError.socketError("could not connect", 0)
-        }
-
-        connectionState = .disconnected(error)
-        notify { $0.signalClient(self, didFailConnection: realError) }
     }
 }
