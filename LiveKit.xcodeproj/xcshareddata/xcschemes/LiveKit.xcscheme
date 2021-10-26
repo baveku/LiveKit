@@ -14,7 +14,7 @@
             buildForAnalyzing = "YES">
             <BuildableReference
                BuildableIdentifier = "primary"
-               BlueprintIdentifier = "DF0C70392727A6F600BC58E6"
+               BlueprintIdentifier = "DF2FD06C27281CDA000B91FD"
                BuildableName = "LiveKit.framework"
                BlueprintName = "LiveKit"
                ReferencedContainer = "container:LiveKit.xcodeproj">
@@ -50,7 +50,7 @@
       <MacroExpansion>
          <BuildableReference
             BuildableIdentifier = "primary"
-            BlueprintIdentifier = "DF0C70392727A6F600BC58E6"
+            BlueprintIdentifier = "DF2FD06C27281CDA000B91FD"
             BuildableName = "LiveKit.framework"
             BlueprintName = "LiveKit"
             ReferencedContainer = "container:LiveKit.xcodeproj">
