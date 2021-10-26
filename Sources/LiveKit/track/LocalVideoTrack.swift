@@ -121,31 +121,31 @@ public class LocalVideoTrack: VideoTrack {
         // Set the new track
         sender?.track = result.rtcTrack
     }
-
-    public static func createReplayKitTrack(name: String,
-                                            options: LocalVideoTrackOptions = LocalVideoTrackOptions()) throws -> LocalVideoTrack {
-
-        let source = Engine.factory.videoSource()
-        let capturer = ReplayKitCapturer(source: source)
-        let rtcTrack = Engine.factory.videoTrack(with: source, trackId: UUID().uuidString)
-        rtcTrack.isEnabled = true
-
-#if !os(macOS)
-        let videoSize = Dimensions(
-            width: Int(UIScreen.main.bounds.size.width * UIScreen.main.scale),
-            height: Int(UIScreen.main.bounds.size.height * UIScreen.main.scale)
-        )
-#else
-        let videoSize = Dimensions(width: 0, height: 0)
-#endif
-
-        return LocalVideoTrack(
-            rtcTrack: rtcTrack,
-            capturer: capturer,
-            source: source,
-            name: name,
-            dimensions: videoSize
-        )
-    }
-
+//    #if canImport(ReplayKit)
+//    public static func createReplayKitTrack(name: String,
+//                                            options: LocalVideoTrackOptions = LocalVideoTrackOptions()) throws -> LocalVideoTrack {
+//
+//        let source = Engine.factory.videoSource()
+//        let capturer = ReplayKitCapturer(source: source)
+//        let rtcTrack = Engine.factory.videoTrack(with: source, trackId: UUID().uuidString)
+//        rtcTrack.isEnabled = true
+//
+//#if !os(macOS)
+//        let videoSize = Dimensions(
+//            width: Int(UIScreen.main.bounds.size.width * UIScreen.main.scale),
+//            height: Int(UIScreen.main.bounds.size.height * UIScreen.main.scale)
+//        )
+//#else
+//        let videoSize = Dimensions(width: 0, height: 0)
+//#endif
+//
+//        return LocalVideoTrack(
+//            rtcTrack: rtcTrack,
+//            capturer: capturer,
+//            source: source,
+//            name: name,
+//            dimensions: videoSize
+//        )
+//    }
+//    #endif
 }
