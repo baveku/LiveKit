@@ -1,4 +1,4 @@
-binary "./json/webrtc.json" "92.4515.10"
 github "apple/swift-protobuf" "1.18.0"
 github "daltoniam/Starscream" "4.0.4"
 github "google/Promises" "2.0.0"
+github "webrtc-sdk/Specs" "92.4515.10"
