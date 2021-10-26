@@ -1,4 +1,4 @@
 github "apple/swift-protobuf" ~> 1.0
-binary "./json/webrtc.json"
+binary "webrtc.json"
 github "daltoniam/Starscream" >= 4.0.0
 github "google/Promises"
