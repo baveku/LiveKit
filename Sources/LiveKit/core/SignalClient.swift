@@ -14,15 +14,19 @@ class SignalClient: MulticastDelegate<SignalClientDelegate> {
         close()
     }
 
-    func connect(options: ConnectOptions, reconnect: Bool = false) -> Promise<Void> {
-        let rtcUrl = try options.buildUrl(reconnect: reconnect)
-        logger.debug("open connect with url: \(rtcUrl)")
-        self.webSocket?.forceDisconnect()
-        let webSocket = WebSocket(request: .init(url: rtcUrl))
-        webSocket.delegate = self
-        webSocket.connect()
-        self.webSocket = webSocket
-        self.connectionState = .connecting(isReconnecting: reconnect)
+    func connect(options: ConnectOptions, reconnect: Bool = false) {
+        Promise<Void> { () -> Void in
+            let rtcUrl = try options.buildUrl(reconnect: reconnect)
+            logger.debug("connecting with url: \(rtcUrl)")
+            self.webSocket?.forceDisconnect()
+            let webSocket = WebSocket(request: .init(url: rtcUrl))
+            webSocket.delegate = self
+            webSocket.connect()
+            self.webSocket = webSocket
+            self.connectionState = .connecting(isReconnecting: reconnect)
+        }.then {
+            self.waitForWebSocketConnected()
+        }
     }
 
     private func sendRequest(_ request: Livekit_SignalRequest) {
@@ -254,12 +258,7 @@ extension SignalClient: WebSocketDelegate {
         switch event {
         case .connected(_):
             connectionState = .connected
-            var delegate: SignalClientDelegateClosures?
-            delegate = SignalClientDelegateClosures(didReceiveJoinResponse: { _, joinResponse in
-                delegate = nil
-            })
-            // not required to clean up since weak reference
-            self.add(delegate: delegate!)
+            notify { $0.signalClient(self, didConnect: false) }
         case .disconnected(let reason, let code):
             let error = SignalClientError.socketError(reason, code)
             connectionState = .disconnected(error)
@@ -278,7 +277,6 @@ extension SignalClient: WebSocketDelegate {
         case .reconnectSuggested(let isConnecting):
             if !isConnecting {
                 connectionState = .connected
-//                receiveNext()
             } else {
                 connectionState = .connecting(isReconnecting: isConnecting)
             }
