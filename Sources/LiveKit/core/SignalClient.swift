@@ -14,7 +14,7 @@ class SignalClient: MulticastDelegate<SignalClientDelegate> {
         close()
     }
 
-    func connect(options: ConnectOptions, reconnect: Bool = false) {
+    func connect(options: ConnectOptions, reconnect: Bool = false) -> Promise<Void> {
         Promise<Void> { () -> Void in
             let rtcUrl = try options.buildUrl(reconnect: reconnect)
             logger.debug("connecting with url: \(rtcUrl)")
