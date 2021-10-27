@@ -15,9 +15,9 @@ Pod::Spec.new do |spec|
   #  summary should be tweet-length, and the description more in depth.
   #
 
-  spec.name         = "LiveKit"
-  spec.version      = "0.8.5
-  spec.summary      = "A short description of LiveKit"
+  spec.name         = 'LiveKit'
+  spec.version      = '0.8.5'
+  spec.summary      = 'A short description of LiveKit'
 
   # This description is used to generate tags and improve search results.
   #   * Think: What does it do? Why did you write it? What is the focus?
@@ -27,7 +27,7 @@ Pod::Spec.new do |spec|
   spec.description  = <<-DESC
                    LiveKit for pods
 
-  spec.homepage     = "https//github.com/baveku/LiveKit"
+  spec.homepage     = 'https//github.com/baveku/LiveKit'
   # spec.screenshots  = "www.example.com/screenshots_1.gif", "www.example.com/screenshots_2.gif"
 
 
