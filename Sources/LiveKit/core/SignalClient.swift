@@ -7,25 +7,43 @@ class SignalClient: MulticastDelegate<SignalClientDelegate> {
 
     // connection state of WebSocket
     private(set) var connectionState: ConnectionState = .disconnected()
-
     private var webSocket: WebSocket?
     deinit {
         webSocket?.forceDisconnect()
         close()
     }
+    
+    func makeSocket(options: ConnectOptions, reconnect: Bool = false) {
+        let rtcUrl = try! options.buildUrl(reconnect: reconnect)
+        logger.debug("connecting with url: \(rtcUrl)")
+        self.webSocket?.forceDisconnect()
+        let webSocket = WebSocket(request: .init(url: rtcUrl))
+        webSocket.delegate = self
+        self.webSocket = webSocket
+    }
 
-    func connect(options: ConnectOptions, reconnect: Bool = false) -> Promise<Void> {
+    func connect(options: ConnectOptions, reconnect: Bool = false) -> Promise<Livekit_JoinResponse> {
         Promise<Void> { () -> Void in
-            let rtcUrl = try options.buildUrl(reconnect: reconnect)
-            logger.debug("connecting with url: \(rtcUrl)")
-            self.webSocket?.forceDisconnect()
-            let webSocket = WebSocket(request: .init(url: rtcUrl))
-            webSocket.delegate = self
-            webSocket.connect()
-            self.webSocket = webSocket
-            self.connectionState = .connecting(isReconnecting: reconnect)
+            self.makeSocket(options: options, reconnect: reconnect)
         }.then {
-            self.waitForWebSocketConnected()
+            self.connectAndWaitReceiveJoinResponse()
+        }
+    }
+    
+    func reconnect() -> Promise<Void> {
+        .init { fulfill, reject in
+            var delegate: SignalClientDelegateClosures?
+            delegate = SignalClientDelegateClosures(didConnect: { _, _ in
+                // wait until connected
+                fulfill(())
+                delegate = nil
+            }, didFailConnection: { _, error in
+                reject(error)
+                delegate = nil
+            })
+            // not required to clean up since weak reference
+            self.add(delegate: delegate!)
+            self.webSocket?.connect()
         }
     }
 
@@ -105,28 +123,7 @@ class SignalClient: MulticastDelegate<SignalClientDelegate> {
 // MARK: Wait extension
 
 extension SignalClient {
-
-    func waitForWebSocketConnected() -> Promise<Void> {
-
-        return Promise<Void> { fulfill, reject in
-            // create temporary delegate
-            var delegate: SignalClientDelegateClosures?
-            delegate = SignalClientDelegateClosures(didConnect: { _, _ in
-                // wait until connected
-                fulfill(())
-                delegate = nil
-            }, didFailConnection: { _, error in
-                reject(error)
-                delegate = nil
-            })
-            // not required to clean up since weak reference
-            self.add(delegate: delegate!)
-        }
-        // convert to a timed-promise
-        .timeout(3)
-    }
-
-    func waitReceiveJoinResponse() -> Promise<Livekit_JoinResponse> {
+    func connectAndWaitReceiveJoinResponse() -> Promise<Livekit_JoinResponse> {
 
         logger.debug("waiting for join response...")
 
@@ -140,9 +137,8 @@ extension SignalClient {
             })
             // not required to clean up since weak reference
             self.add(delegate: delegate!)
+            self.webSocket?.connect()
         }
-        // convert to a timed-promise
-        .timeout(3)
     }
 }
 

@@ -91,10 +91,7 @@ class Engine: MulticastDelegate<EngineDelegate> {
         
         self.connectionState = .connecting(isReconnecting: false)
         
-        return signalClient.connect(options: self.connectOptions).then {
-            // wait for join response
-            self.signalClient.waitReceiveJoinResponse()
-        }.then { joinResponse in
+        return signalClient.connect(options: self.connectOptions).then { joinResponse in
             // set up peer connections
             self.configureTransports(joinResponse: joinResponse)
         }.then {
@@ -104,6 +101,8 @@ class Engine: MulticastDelegate<EngineDelegate> {
             // connect sequence successful
             logger.debug("connect sequence completed")
             self.connectionState = .connected
+        }.catch { err in
+            logger.error("[CONNECT] \(err.localizedDescription)")
         }
     }
     
@@ -128,7 +127,7 @@ class Engine: MulticastDelegate<EngineDelegate> {
         
         func reconnectSequence() -> Promise<Void> {
             
-            signalClient.connect(options: self.connectOptions, reconnect: true).then {
+            signalClient.reconnect().then {
                 self.waitForIceConnect(transport: self.primary)
             }.then { () -> Promise<Void> in
                 self.subscriber?.restartingIce = true
@@ -173,6 +172,7 @@ class Engine: MulticastDelegate<EngineDelegate> {
         signalClient.close()
         publisher = nil
         subscriber = nil
+        subscriberPrimary = false
         connectionState = .disconnected(nil)
     }
     
@@ -344,7 +344,7 @@ extension Engine: SignalClientDelegate {
             lossyDC?.delegate = self
             
         } catch {
-            //
+            logger.debug(error.localizedDescription)
         }
         
         if !subscriberPrimary {
