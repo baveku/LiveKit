@@ -26,6 +26,7 @@ Pod::Spec.new do |spec|
   #   * Finally, don't worry about the indent, CocoaPods strips it!
   spec.description  = <<-DESC
                    LiveKit for pods
+                   DESC
 
   spec.homepage     = 'https//github.com/baveku/LiveKit'
   # spec.screenshots  = "www.example.com/screenshots_1.gif", "www.example.com/screenshots_2.gif"
