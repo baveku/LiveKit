@@ -2,13 +2,14 @@
 
 Official Client SDK for [LiveKit](https://github.com/livekit/livekit-server). Easily add video & audio capabilities to your iOS apps.
 
+Example: [LiveKit-iOS-Example](https://github.com/baveku/LiveKit-iOS-Example)
 ## Docs
 
 Docs and guides at [https://docs.livekit.io](https://docs.livekit.io)
 
 ## Installation
 
-LiveKit for iOS is available as a Swift Package.
+LiveKit for iOS is available as a Swift Package, Carthage, Cocoapods.
 
 ### Package.swift
 
@@ -29,11 +30,28 @@ let package = Package(
 }
 ```
 
+### Carthage
+```bash
+github "baveku/LiveKit"
+```
+
+### Cocoapods
+```ruby
+pod "LiveKit", :git => "htttps://github.com/baveku/LiveKit"
+#... more
+
+post_install do |installer|
+  installer.pods_project.targets.each do |target|
+    target.build_configurations.each do |config|
+      config.build_settings['ENABLE_BITCODE'] = 'NO'
+    end
+  end
+end
+```
+
 ### XCode
-
-Go to Project Settings -> Swift Packages.
-
-Add a new package and enter: `https://github.com/livekit/client-sdk-ios`
+LiveKit need to disable Bitcode.
+You can go to Xcode => Project => Buid setting => search bitcode and disable it.
 
 ## Usage
 
@@ -44,9 +62,7 @@ import LiveKit
 import UIKit
 
 class RoomViewController: UIViewController {
-    var room: Room?
-    var remoteVideo: VideoView?
-    var localVideo: VideoView?
+    var room: Room!
 
     override func viewDidLoad() {
         super.viewDidLoad()
@@ -55,7 +71,8 @@ class RoomViewController: UIViewController {
         let url: String = "ws://your_host"
         let token: String = "your_jwt_token"
 
-        room = LiveKit.connect(options: ConnectOptions(url: url, token: token), delegate: self)
+        room = Room(options: ConnectOptions(url: url, token: token), delegate: self)
+        room.connect()
     }
 
     func attachVideo(track: VideoTrack, participant: Participant) {
