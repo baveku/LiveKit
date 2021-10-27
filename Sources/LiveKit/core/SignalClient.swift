@@ -264,7 +264,9 @@ extension SignalClient: WebSocketDelegate {
             connectionState = .disconnected(error)
             notify { $0.signalClient(self, didFailConnection: error) }
         case .text(let message):
-            handleReceiveMessage(text: message)
+            handleReceiveMessage(msg: message)
+        case .binary(let data):
+            handleReceiveMessage(msg: data)
         case .error(let error):
             var realError: Error
             if let error = error {
@@ -288,10 +290,14 @@ extension SignalClient: WebSocketDelegate {
         }
     }
     
-    func handleReceiveMessage(text: String) {
+    func handleReceiveMessage(msg: Any) {
         var response: Livekit_SignalResponse?
         do {
-            response = try Livekit_SignalResponse(jsonString: text)
+            if let text = msg as? String {
+                response = try Livekit_SignalResponse(jsonString: text)
+            } else if let data = msg as? Data {
+                response = try Livekit_SignalResponse(contiguousBytes: data)
+            }
         } catch {
             logger.error("could not decode JSON message: \(error)")
             handleError(error.localizedDescription)
