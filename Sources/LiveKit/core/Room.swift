@@ -52,7 +52,6 @@ public class Room: MulticastDelegate<RoomDelegate> {
     public func disconnect() {
         engine.signalClient.sendLeave()
         engine.disconnect()
-        handleDisconnect()
     }
     
     private func handleParticipantDisconnect(sid: Sid, participant: RemoteParticipant) {
@@ -152,7 +151,7 @@ public class Room: MulticastDelegate<RoomDelegate> {
 
         remoteParticipants.removeAll()
         activeSpeakers.removeAll()
-        //        monitor.cancel()
+        localParticipant = nil
         notify { $0.room(self, didDisconnect: nil) }
     }
 }
