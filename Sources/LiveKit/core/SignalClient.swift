@@ -15,19 +15,14 @@ class SignalClient: MulticastDelegate<SignalClientDelegate> {
     }
 
     func connect(options: ConnectOptions, reconnect: Bool = false) -> Promise<Void> {
-
-        Promise<Void> { () -> Void in
-            let rtcUrl = try options.buildUrl(reconnect: reconnect)
-            logger.debug("open connect with url: \(rtcUrl)")
-            self.webSocket?.forceDisconnect()
-            let webSocket = WebSocket(request: .init(url: rtcUrl))
-            webSocket.delegate = self
-            webSocket.connect()
-            self.webSocket = webSocket
-            self.connectionState = .connecting(isReconnecting: reconnect)
-        }.then {
-            self.waitForWebSocketConnected()
-        }
+        let rtcUrl = try options.buildUrl(reconnect: reconnect)
+        logger.debug("open connect with url: \(rtcUrl)")
+        self.webSocket?.forceDisconnect()
+        let webSocket = WebSocket(request: .init(url: rtcUrl))
+        webSocket.delegate = self
+        webSocket.connect()
+        self.webSocket = webSocket
+        self.connectionState = .connecting(isReconnecting: reconnect)
     }
 
     private func sendRequest(_ request: Livekit_SignalRequest) {
