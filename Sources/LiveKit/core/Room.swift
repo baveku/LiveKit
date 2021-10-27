@@ -21,7 +21,7 @@ public class Room: MulticastDelegate<RoomDelegate> {
         engine.connectionState
     }
 
-    init(connectOptions: ConnectOptions, delegate: RoomDelegate?) {
+    public init(connectOptions: ConnectOptions, delegate: RoomDelegate?) {
 
         engine = Engine(connectOptions: connectOptions)
         super.init()
