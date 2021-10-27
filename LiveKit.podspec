@@ -15,9 +15,9 @@ Pod::Spec.new do |spec|
   #  summary should be tweet-length, and the description more in depth.
   #
 
-  spec.name         = "Livekit"
-  spec.version      = "0.8.2"
-  spec.summary      = "A short description of Livekit."
+  spec.name         = 'LiveKit'
+  spec.version      = '0.8.5'
+  spec.summary      = 'A short description of LiveKit'
 
   # This description is used to generate tags and improve search results.
   #   * Think: What does it do? Why did you write it? What is the focus?
@@ -25,9 +25,10 @@ Pod::Spec.new do |spec|
   #   * Write the description between the DESC delimiters below.
   #   * Finally, don't worry about the indent, CocoaPods strips it!
   spec.description  = <<-DESC
+                   LiveKit for pods
                    DESC
 
-  spec.homepage     = "http://github.com/baveku/Livekit"
+  spec.homepage     = 'https//github.com/baveku/LiveKit'
   # spec.screenshots  = "www.example.com/screenshots_1.gif", "www.example.com/screenshots_2.gif"
 
 
@@ -38,7 +39,7 @@ Pod::Spec.new do |spec|
   #  Popular ones are 'MIT', 'BSD' and 'Apache License, Version 2.0'.
   #
 
-  spec.license      = "MIT (example)"
+  spec.license      = { :type => 'MIT', :file => 'LICENSE' }
   # spec.license      = { :type => "MIT", :file => "FILE_LICENSE" }
 
 
@@ -75,7 +76,7 @@ Pod::Spec.new do |spec|
 
   spec.source       = { :git => "http://github.com/baveku/Livekit.git", :tag => "#{spec.version}" }
 
-  spec.source_files  = "Sources", "Classes/**/*.swift"
+  spec.source_files  = "Sources", "Sources/**/*.swift"
 
 
   spec.dependency "WebRTC-SDK"
