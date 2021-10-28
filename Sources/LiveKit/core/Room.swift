@@ -14,7 +14,7 @@ public class Room: MulticastDelegate<RoomDelegate> {
     public private(set) var localParticipant: LocalParticipant?
     public private(set) var remoteParticipants = [Sid: RemoteParticipant]()
     public private(set) var activeSpeakers: [Participant] = []
-
+    public private(set) var isEnabledVideo = false
     private var lastPathUpdate: TimeInterval = 0
     internal let engine: Engine
     public var state: ConnectionState {
@@ -22,7 +22,6 @@ public class Room: MulticastDelegate<RoomDelegate> {
     }
 
     public init(connectOptions: ConnectOptions, delegate: RoomDelegate?) {
-
         engine = Engine(connectOptions: connectOptions)
         super.init()
         engine.add(delegate: self)
@@ -42,8 +41,7 @@ public class Room: MulticastDelegate<RoomDelegate> {
         guard localParticipant == nil else {
             return Promise(EngineError.invalidState("localParticipant is not nil"))
         }
-
-        //        monitor.start(queue: monitorQueue)
+        
         return engine.connect().then {
             self
         }
@@ -52,6 +50,64 @@ public class Room: MulticastDelegate<RoomDelegate> {
     public func disconnect() {
         engine.signalClient.sendLeave()
         engine.disconnect()
+    }
+    
+    
+    public func disableVideo() {
+        isEnabledVideo = false
+        guard let localParticipant = localParticipant else {
+            return
+        }
+        if let videoTrack = localParticipant.videoTracks.first(where: {$0.value.track?.name == "localVideo"})?.value.track as? LocalVideoTrack {
+            notify({$0.room(self, participant: localParticipant, didDisabledVideo: videoTrack)})
+            DispatchQueue.global(qos: .background).async {
+                try? localParticipant.unpublishTrack(track: videoTrack)
+            }
+        }
+    }
+    
+    public func enableVideo() {
+        isEnabledVideo = true
+        guard let localParticipant = localParticipant else {
+            return
+        }
+        DispatchQueue.global(qos: .background).async {
+            do {
+                let trackOptions = LocalVideoTrackOptions()
+                let videoTrack = try LocalVideoTrack.createTrack(name: "localVideo", options: trackOptions)
+                localParticipant.publishVideoTrack(track: videoTrack).then(on: .main) { _ in
+                    self.notify {$0.room(self, participant: localParticipant, didEnabledVideo: videoTrack)}
+                }
+            } catch {
+                logger.error("[PUBLISH] \(error.localizedDescription)")
+            }
+        }
+        
+    }
+    
+    public func enableAudio() {
+        guard let localParticipant = localParticipant, localParticipant.tracks.filter({$0.value.track?.name == "localAudio"}).isEmpty else {return}
+        DispatchQueue.global(qos: .background).async {
+            do {
+                let audioTrack = LocalAudioTrack.createTrack(name: "localAudio")
+                localParticipant.publishAudioTrack(track: audioTrack).then(on: .main) { _ in
+                    self.notify({$0.room(self, participant: localParticipant, didChangeLocalAudioStatus: true)})
+                }
+            } catch {
+                logger.error("[PUBLISH] \(error.localizedDescription)")
+            }
+        }
+    }
+    
+    public func disableAudio() {
+        guard let localParticipant = localParticipant else {return}
+        if let audioTrack = localParticipant.audioTracks.first(where: {$0.value.track?.name == "localAudio"})?.value.track as? LocalAudioTrack {
+            DispatchQueue.global(qos: .background).async {
+                try? localParticipant.unpublishTrack(track: audioTrack)
+            }
+        }
+        
+        notify({$0.room(self, participant: localParticipant, didChangeLocalAudioStatus: false)})
     }
     
     private func handleParticipantDisconnect(sid: Sid, participant: RemoteParticipant) {
@@ -194,6 +250,12 @@ extension Room: EngineDelegate {
                 _ = getOrCreateRemoteParticipant(sid: otherParticipant.sid, info: otherParticipant)
             }
         }
+        
+        if isEnabledVideo {
+            enableVideo()
+        }
+        
+        enableAudio()
     }
 
     func engine(_ engine: Engine, didAdd track: RTCMediaStreamTrack, streams: [RTCMediaStream]) {
@@ -258,3 +320,5 @@ extension Room: EngineDelegate {
         notify { $0.room(self, didFailToConnect: error) }
     }
 }
+
+

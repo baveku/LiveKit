@@ -275,10 +275,11 @@ extension SignalClient: WebSocketDelegate {
         case .reconnectSuggested(let isConnecting):
             if !isConnecting {
                 connectionState = .connected
+                notify { $0.signalClient(self, didConnect: true) }
             } else {
                 connectionState = .connecting(isReconnecting: isConnecting)
+                notify { $0.signalClient(self, didFailConnection: SignalClientError.socketReconnecting) }
             }
-            notify { $0.signalClient(self, didConnect: isConnecting) }
         case .cancelled:
             connectionState = .disconnected(nil)
             notify({$0.signalClient(self, didClose: "", code: 0)})

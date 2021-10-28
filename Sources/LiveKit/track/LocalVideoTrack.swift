@@ -69,8 +69,8 @@ public class LocalVideoTrack: VideoTrack {
         let fps = options.captureParameter.encoding.maxFps
 
         // discover FPS limits
-        var minFps = 60
-        var maxFps = 0
+        var minFps = 0
+        var maxFps = 60
         for fpsRange in selectedFormat.videoSupportedFrameRateRanges {
             minFps = min(minFps, Int(fpsRange.minFrameRate))
             maxFps = max(maxFps, Int(fpsRange.maxFrameRate))
@@ -99,6 +99,10 @@ public class LocalVideoTrack: VideoTrack {
             name: name,
             dimensions: result.selectedDimensions
         )
+    }
+    
+    public func stopTrack() {
+        (self.capturer as? RTCCameraVideoCapturer)?.stopCapture()
     }
 
     public func restartTrack(options: LocalVideoTrackOptions = LocalVideoTrackOptions()) throws {

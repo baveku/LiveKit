@@ -45,4 +45,5 @@ enum SignalClientError: LiveKitError {
     case socketNotConnected
     case socketError(String?, UInt16)
     case socketDisconnected
+    case socketReconnecting
 }

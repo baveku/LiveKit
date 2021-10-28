@@ -81,6 +81,12 @@ public protocol RoomDelegate {
 
     /// Data was received from a RemoteParticipant
     func room(_ room: Room, participant: RemoteParticipant, didReceive data: Data)
+    
+    /// Received first frame from local
+    func room(_ room: Room, participant: LocalParticipant, didEnabledVideo videoTrack: LocalVideoTrack)
+    func room(_ room: Room, participant: LocalParticipant, didDisabledVideo videoTrack: LocalVideoTrack)
+    
+    func room(_ room: Room, participant: LocalParticipant, didChangeLocalAudioStatus isMuted: Bool)
 }
 
 public extension RoomDelegate {
@@ -99,4 +105,8 @@ public extension RoomDelegate {
     func room(_ room: Room, participant: RemoteParticipant, didFailToSubscribe trackSid: String, error: Error) {}
     func room(_ room: Room, participant: RemoteParticipant, didUnsubscribe trackPublication: RemoteTrackPublication) {}
     func room(_ room: Room, participant: RemoteParticipant, didReceive data: Data) {}
+    func room(_ room: Room, participant: LocalParticipant, didEnabledVideo videoTrack: LocalVideoTrack) {}
+    func room(_ room: Room, participant: LocalParticipant, didDisabledVideo videoTrack: LocalVideoTrack) {}
+    
+    func room(_ room: Room, participant: LocalParticipant, didChangeLocalAudioStatus isMuted: Bool) {}
 }

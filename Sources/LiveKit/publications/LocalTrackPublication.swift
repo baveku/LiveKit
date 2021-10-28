@@ -1,4 +1,5 @@
 import Foundation
+import WebRTC
 
 public class LocalTrackPublication: TrackPublication {
     /// Mute or unmute this track
@@ -16,6 +17,14 @@ public class LocalTrackPublication: TrackPublication {
 
         mediaTrack.mediaTrack.isEnabled = !muted
         self.muted = muted
+        
+        if let capturer = (mediaTrack as? LocalVideoTrack) {
+            if muted {
+                capturer.stopTrack()
+            } else {
+                try? capturer.restartTrack()
+            }
+        }
 
         // send server flag
         guard let participant = self.participant as? LocalParticipant else {
