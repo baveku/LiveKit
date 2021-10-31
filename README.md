@@ -1,6 +1,6 @@
 # iOS Swift SDK for LiveKit
 
-# Why am I fork LiveKit?
+# Why do I fork LiveKit?
 - Because I need support iOS 10 for my project.
 - Many bugs critical need fix, I hope I solved it for you.
 - You have issue please not report here\nso you can report in root repo for community can see and fix it together.
