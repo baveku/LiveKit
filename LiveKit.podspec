@@ -16,7 +16,7 @@ Pod::Spec.new do |spec|
   #
 
   spec.name         = 'LiveKit'
-  spec.version      = '0.8.5'
+  spec.version      = '0.8.6'
   spec.summary      = 'A short description of LiveKit'
 
   # This description is used to generate tags and improve search results.
