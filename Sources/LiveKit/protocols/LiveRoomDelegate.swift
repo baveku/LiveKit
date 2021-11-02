@@ -3,7 +3,7 @@ import Foundation
 /// RoomDelegate receives room events as well as participant events.
 ///
 /// The only two required delegates are `participantDidConnect` and `participantDidDisconnect`
-public protocol RoomDelegate {
+public protocol LiveRoomDelegate {
     /// Successfully connected to the room
     func room(_ room: LiveRoom, didConnect isReconnect: Bool)
 
@@ -89,7 +89,7 @@ public protocol RoomDelegate {
     func room(_ room: LiveRoom, participant: LocalParticipant, didChangeLocalAudioStatus isMuted: Bool)
 }
 
-public extension RoomDelegate {
+public extension LiveRoomDelegate {
     func room(_ room: LiveRoom, didConnect isReconnect: Bool) {}
     func room(_ room: LiveRoom, didFailToConnect error: Error) {}
     func room(_ room: LiveRoom, didDisconnect error: Error?) {}

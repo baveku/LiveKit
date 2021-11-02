@@ -7,7 +7,7 @@ import WebRTC
 // using a timer interval to ignore changes that are happening too close to each other
 let networkChangeIgnoreInterval = 3.0
 
-public class LiveRoom: MulticastDelegate<RoomDelegate> {
+public class LiveRoom: MulticastDelegate<LiveRoomDelegate> {
 
     public private(set) var sid: Sid?
     public private(set) var name: String?
@@ -21,7 +21,7 @@ public class LiveRoom: MulticastDelegate<RoomDelegate> {
         engine.connectionState
     }
 
-    public init(connectOptions: ConnectOptions, delegate: RoomDelegate?) {
+    public init(connectOptions: ConnectOptions, delegate: LiveRoomDelegate?) {
         engine = Engine(connectOptions: connectOptions)
         super.init()
         engine.add(delegate: self)
