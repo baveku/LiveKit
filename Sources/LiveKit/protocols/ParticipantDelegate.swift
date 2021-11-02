@@ -3,7 +3,7 @@ import Foundation
 /// delegate methods for a participant.
 ///
 /// You can set `Participant.delegate` on each participant. All delegate methods are optional
-/// To ensure each participant's delegate is registered, you can look through `Room.localParticipant` and `Room.remoteParticipants` on connect
+/// To ensure each participant's delegate is registered, you can look through `LiveRoom.localParticipant` and `LiveRoom.remoteParticipants` on connect
 /// and register it on new participants inside `RoomDelegate.participantDidConnect`
 public protocol ParticipantDelegate {
     // all participants

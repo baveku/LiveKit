@@ -9,7 +9,7 @@ public class LocalParticipant: Participant {
     public var localVideoTrackPublications: [TrackPublication] { Array(videoTracks.values) }
     weak var engine: Engine?
 
-    convenience init(fromInfo info: Livekit_ParticipantInfo, engine: Engine, room: Room) {
+    convenience init(fromInfo info: Livekit_ParticipantInfo, engine: Engine, room: LiveRoom) {
         self.init(sid: info.sid)
         updateFromInfo(info: info)
         self.engine = engine

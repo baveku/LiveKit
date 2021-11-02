@@ -4,8 +4,8 @@ import WebRTC
 
 public class LiveKit {
     static let queue = DispatchQueue(label: "lk_queue")
-    public static func connect(options: ConnectOptions, delegate: RoomDelegate? = nil) -> Promise<Room> {
-        let room = Room(connectOptions: options, delegate: delegate)
+    public static func connect(options: ConnectOptions, delegate: RoomDelegate? = nil) -> Promise<LiveRoom> {
+        let room = LiveRoom(connectOptions: options, delegate: delegate)
         return room.connect()
     }
     

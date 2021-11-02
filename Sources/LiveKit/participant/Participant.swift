@@ -36,7 +36,7 @@ public class Participant: MulticastDelegate<ParticipantDelegate> {
 
     var info: Livekit_ParticipantInfo?
 
-    weak var room: Room?
+    weak var room: LiveRoom?
 
     public init(sid: String) {
         self.sid = sid

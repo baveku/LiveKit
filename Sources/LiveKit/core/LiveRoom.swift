@@ -7,7 +7,7 @@ import WebRTC
 // using a timer interval to ignore changes that are happening too close to each other
 let networkChangeIgnoreInterval = 3.0
 
-public class Room: MulticastDelegate<RoomDelegate> {
+public class LiveRoom: MulticastDelegate<RoomDelegate> {
 
     public private(set) var sid: Sid?
     public private(set) var name: String?
@@ -36,7 +36,7 @@ public class Room: MulticastDelegate<RoomDelegate> {
     }
 
     @discardableResult
-    public func connect() -> Promise<Room> {
+    public func connect() -> Promise<LiveRoom> {
         logger.info("connecting to room")
         guard localParticipant == nil else {
             return Promise(EngineError.invalidState("localParticipant is not nil"))
@@ -214,7 +214,7 @@ public class Room: MulticastDelegate<RoomDelegate> {
 
 // MARK: - RTCEngineDelegate
 
-extension Room: EngineDelegate {
+extension LiveRoom: EngineDelegate {
 
     func engine(_ engine: Engine, didUpdateSignal speakers: [Livekit_SpeakerInfo]) {
         onSignalSpeakersUpdate(speakers)

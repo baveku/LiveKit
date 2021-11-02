@@ -196,4 +196,8 @@ extension Transport: RTCPeerConnectionDelegate {
     func peerConnection(_ peerConnection: RTCPeerConnection, didAdd stream: RTCMediaStream) {}
     func peerConnection(_ peerConnection: RTCPeerConnection, didChange newState: RTCIceGatheringState) {}
     func peerConnection(_ peerConnection: RTCPeerConnection, didRemove candidates: [RTCIceCandidate]) {}
+    
+    func peerConnection(_ peerConnection: RTCPeerConnection, didChangeLocalCandidate local: RTCIceCandidate, remoteCandidate remote: RTCIceCandidate, lastReceivedMs lastDataReceivedMs: Int32, changeReason reason: String) {
+        logger.debug("[RTCPeerConnectionDelegate] didChangeLocalCandidate lastReceivedMs: \(lastDataReceivedMs)")
+    }
 }
