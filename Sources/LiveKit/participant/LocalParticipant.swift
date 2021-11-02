@@ -22,36 +22,45 @@ public class LocalParticipant: Participant {
 
     /// publish a new audio track to the Room
     public func publishAudioTrack(track: LocalAudioTrack,
-                                  options _: LocalAudioTrackPublishOptions? = nil) -> Promise<LocalTrackPublication> {
+                                  publishOptions: LocalAudioTrackPublishOptions? = nil) -> Promise<LocalTrackPublication> {
 
         guard let engine = engine else {
             return Promise(EngineError.invalidState("engine is null"))
         }
+
+        let publishOptions = publishOptions ?? engine.options?.defaultAudioPublishOptions
 
         if localAudioTrackPublications.first(where: { $0.track === track }) != nil {
             return Promise(TrackError.publishError("This track has already been published."))
         }
 
         let cid = track.mediaTrack.trackId
-        return engine.addTrack(cid: cid, name: track.name, kind: .audio).then { trackInfo in
-
+        return engine.addTrack(cid: cid, name: track.name, kind: .audio) {
+            $0.disableDtx = !(publishOptions?.dtx ?? true)
+        }.then { trackInfo in
+            
             Promise<LocalTrackPublication> { () -> LocalTrackPublication in
-
+                
                 track.start()
-
+                
                 let transInit = RTCRtpTransceiverInit()
                 transInit.direction = .sendOnly
                 transInit.streamIds = [self.streamId]
-
+                
                 let transceiver = self.engine?.publisher?.pc.addTransceiver(with: track.mediaTrack, init: transInit)
                 if transceiver == nil {
                     throw TrackError.publishError("Nil sender returned from peer connection.")
                 }
-
+                
                 engine.publisherShouldNegotiate()
-
+                
                 let publication = LocalTrackPublication(info: trackInfo, track: track, participant: self)
                 self.addTrack(publication: publication)
+                
+                // notify didPublish
+                self.notify { $0.localParticipant(self, didPublish: publication) }
+                self.room?.notify { $0.room(self.room!, localParticipant: self, didPublish: publication) }
+                
                 return publication
             }
         }
@@ -59,7 +68,7 @@ public class LocalParticipant: Participant {
 
     /// publish a new video track to the Room
     public func publishVideoTrack(track: LocalVideoTrack,
-                                  options: LocalVideoTrackPublishOptions? = nil) -> Promise<LocalTrackPublication> {
+                                  publishOptions: LocalVideoTrackPublishOptions? = nil) -> Promise<LocalTrackPublication> {
 
         logger.debug("[Publish] video")
 
@@ -67,7 +76,7 @@ public class LocalParticipant: Participant {
             return Promise(EngineError.invalidState("engine is null"))
         }
 
-        let publishOptions = options ?? LocalVideoTrackPublishOptions()
+        let publishOptions = publishOptions ?? engine.options?.defaultVideoPublishOptions
 
         if localVideoTrackPublications.first(where: { $0.track === track }) != nil {
             return Promise(TrackError.publishError("This track has already been published."))
@@ -76,63 +85,84 @@ public class LocalParticipant: Participant {
         let cid = track.mediaTrack.trackId
         return engine.addTrack(cid: cid,
                                name: track.name,
-                               kind: .video,
-                               dimensions: track.dimensions) .then { trackInfo in
+                               kind: .video) {
+            $0.width = UInt32(track.dimensions.width)
+            $0.height = UInt32(track.dimensions.height)
+        }.then { trackInfo in
+            
+            Promise<LocalTrackPublication> { () -> LocalTrackPublication in
+                
+                track.start()
+                
+                let transInit = RTCRtpTransceiverInit()
+                transInit.direction = .sendOnly
+                transInit.streamIds = [self.streamId]
+                
+                if let encodings = Utils.computeEncodings(dimensions: track.dimensions,
+                                                          publishOptions: publishOptions) {
+                    print("using encodings %@", encodings)
+                    transInit.sendEncodings = encodings
+                }
+                
+                track.transceiver = self.engine?.publisher?.pc.addTransceiver(with: track.mediaTrack, init: transInit)
+                if track.transceiver == nil {
+                    throw TrackError.publishError("Nil sender returned from peer connection.")
+                }
+                
+                engine.publisherShouldNegotiate()
+                
+                let publication = LocalTrackPublication(info: trackInfo, track: track, participant: self)
+                self.addTrack(publication: publication)
+                
+                // notify didPublish
+                self.notify { $0.localParticipant(self, didPublish: publication) }
+                self.room?.notify { $0.room(self.room!, localParticipant: self, didPublish: publication) }
+                
+                return publication
+            }
+        }
+    }
 
-                                Promise<LocalTrackPublication> { () -> LocalTrackPublication in
-
-                                    track.start()
-
-                                    let transInit = RTCRtpTransceiverInit()
-                                    transInit.direction = .sendOnly
-                                    transInit.streamIds = [self.streamId]
-
-                                    if let encodings = Utils.computeEncodings(dimensions: track.dimensions, publishOptions: publishOptions) {
-                                        print("using encodings %@", encodings)
-                                        transInit.sendEncodings = encodings
-                                    }
-
-                                    track.transceiver = self.engine?.publisher?.pc.addTransceiver(with: track.mediaTrack, init: transInit)
-                                    if track.transceiver == nil {
-                                        throw TrackError.publishError("Nil sender returned from peer connection.")
-                                    }
-
-                                    engine.publisherShouldNegotiate()
-
-                                    let publication = LocalTrackPublication(info: trackInfo, track: track, participant: self)
-                                    self.addTrack(publication: publication)
-                                    return publication
-
-                                }
-                               }
+    public func unpublishAll(shouldNotify: Bool = true) -> Promise<[Void]> {
+        // build a list of promises
+        let promises = tracks.values.compactMap { $0 as? LocalTrackPublication }
+            .map { unpublish(publication: $0, shouldNotify: shouldNotify) }
+        // combine promises to wait all to complete
+        return all(promises)
     }
 
     /// unpublish an existing published track
     /// this will also stop the track
-    public func unpublishTrack(track: Track) throws {
+    public func unpublish(publication: LocalTrackPublication, shouldNotify: Bool = true) -> Promise<Void> {
 
-        guard let sid = track.sid else {
-            throw TrackError.invalidTrackState("This track was never published.")
-        }
-
-        let publication = tracks.removeValue(forKey: sid)
-        guard publication != nil else {
-            throw TrackError.unpublishError("could not find published track for \(sid)")
-        }
-
-        track.stop()
-
-        guard let pc = engine?.publisher?.pc else {
-            return
-        }
-
-        for sender in pc.senders {
-            if let t = sender.track {
-                if t.isEqual(track.mediaTrack) {
-                    pc.removeTrack(sender)
-                    engine?.publisherShouldNegotiate()
-                }
+        func notifyDidUnpublish() -> Promise<Void> {
+            Promise<Void> {
+                guard shouldNotify else { return }
+                // notify unpublish
+                self.notify { $0.localParticipant(self, didUnpublish: publication) }
+                self.room?.notify { $0.room(self.room!, localParticipant: self, didUnpublish: publication) }
             }
+        }
+
+        // remove the publication
+        tracks.removeValue(forKey: publication.sid)
+
+        // if track is nil, only notify unpublish and return
+        guard let track = publication.track else {
+            return notifyDidUnpublish()
+        }
+
+        // wait for track to stop
+        return track.stop().then { () -> Void in
+
+            if let pc = self.engine?.publisher?.pc,
+               let sender = track.sender {
+                pc.removeTrack(sender)
+                self.engine?.publisherShouldNegotiate()
+            }
+
+        }.then {
+            notifyDidUnpublish()
         }
     }
 

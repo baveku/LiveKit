@@ -1,98 +1,144 @@
 import Foundation
 import WebRTC
-import CoreMedia
 
 #if !os(macOS)
+typealias NativeRect = CGRect
 import UIKit
-import SwiftUI
-public typealias NativeViewType = UIView
 #else
-// macOS
-public typealias NativeViewType = NSView
+import AppKit
+typealias NativeRect = NSRect
 #endif
 
-public class VideoView: NativeViewType {
+public class VideoView: NativeView {
+
+    enum Mode {
+        case fit
+        case fill
+    }
+
+    var mode: Mode = .fill {
+        didSet {
+            shouldLayout()
+        }
+    }
+
+    var videoSize: CGSize
+
+    override init(frame: CGRect) {
+        self.videoSize = frame.size
+        super.init(frame: frame)
+    }
+
+    required init?(coder: NSCoder) {
+        fatalError("init(coder:) has not been implemented")
+    }
 
     public private(set) lazy var rendererView: RTCVideoRenderer = {
-        #if arch(arm64)
-
-        #if !os(macOS)
-        let view = RTCMTLVideoView()
-        view.videoContentMode = .scaleAspectFill
-        view.delegate = self
-        #else
-        // macOS
-        let view = RTCMTLNSVideoView()
-        view.delegate = self
-        #endif
-
-        #else
-        // intel
-        let view = RTCEAGLVideoView()
-        view.contentMode = .scaleAspectFill
-        view.delegate = self
-        #endif
-        return view
+        VideoView.createNativeRendererView(delegate: self)
     }()
 
-    required init?(coder decoder: NSCoder) {
-        super.init(coder: decoder)
-    }
-
-    override public init(frame: CGRect) {
-        super.init(frame: frame)
-
-#if !os(macOS)
-        layer.backgroundColor = UIColor.black.cgColor
-#else
-        layer?.backgroundColor = NSColor.black.cgColor
-#endif
-
-        if let rendererView = rendererView as? NativeViewType {
-            addSubview(rendererView)
-        }
-        layoutRenderView()
-    }
-
-    private func layoutRenderView() {
-        if let rendererView = rendererView as? NativeViewType {
-            rendererView.frame = self.bounds
+    /// Calls addRenderer and/or removeRenderer internally for convenience.
+    public var track: VideoTrack? {
+        didSet {
+            if let oldValue = oldValue {
+                oldValue.removeRenderer(rendererView)
+            }
+            track?.addRenderer(rendererView)
         }
     }
 
-#if !os(macOS)
-    public override func layoutSubviews() {
-        super.layoutSubviews()
-        layoutRenderView()
+    override func shouldPrepare() {
+        super.shouldPrepare()
+        guard let rendererView = rendererView as? NativeViewType else { return }
+        rendererView.translatesAutoresizingMaskIntoConstraints = true
+        addSubview(rendererView)
+        shouldLayout()
     }
-#else
-    public override func layout() {
-        super.layout()
-        layoutRenderView()
+
+    override func shouldLayout() {
+        super.shouldLayout()
+        guard let rendererView = rendererView as? NativeViewType else { return }
+
+        let viewSize = bounds.size
+        guard videoSize.width != 0.0 || videoSize.height != 0.0 else {
+            rendererView.isHidden = true
+            return
+        }
+
+        if .fill == mode {
+            // manual calculation for .fill
+            let width, height: CGFloat
+            var xDiff: CGFloat = 0.0
+            var yDiff: CGFloat = 0.0
+            if videoSize.width > videoSize.height {
+                let ratio = videoSize.width / videoSize.height
+                width = viewSize.height * ratio
+                height = viewSize.height
+                xDiff = (width - height) / 2
+            } else {
+                let ratio = videoSize.height / videoSize.width
+                width = viewSize.width
+                height = viewSize.width * ratio
+                yDiff = (height - width) / 2
+            }
+
+            rendererView.frame = NativeRect(x: -xDiff,
+                                            y: -yDiff,
+                                            width: width,
+                                            height: height)
+        } else {
+            //
+            rendererView.frame = bounds
+        }
+
+        rendererView.isHidden = false
     }
-#endif
+
+    static func createNativeRendererView(delegate: RTCVideoViewDelegate) -> RTCVideoRenderer {
+
+        #if !os(macOS)
+        // iOS --------------------
+
+        #if targetEnvironment(simulator)
+        print("Using RTCEAGLVideoView for VideoView's Renderer")
+        let view = RTCEAGLVideoView()
+        view.contentMode = .scaleAspectFit
+        view.delegate = delegate
+        #else
+        print("Using RTCMTLVideoView for VideoView's Renderer")
+        let view = RTCMTLVideoView()
+        // use .fit here to match macOS behavior and
+        // manually calculate .fill if necessary
+        view.contentMode = .scaleAspectFit
+        view.videoContentMode = .scaleAspectFit
+        view.delegate = delegate
+        #endif
+
+        #else
+        // macOS --------------------
+        let view: RTCVideoRenderer
+        if RTCMTLNSVideoView.isMetalAvailable() {
+            print("Using RTCMTLNSVideoView for VideoView's Renderer")
+            let mtlView = RTCMTLNSVideoView()
+            mtlView.delegate = delegate
+            view = mtlView
+        } else {
+            print("Using RTCNSGLVideoView for VideoView's Renderer")
+            let glView = RTCNSGLVideoView()
+            glView.delegate = delegate
+            view = glView
+        }
+        #endif
+
+        return view
+    }
 }
 
 extension VideoView: RTCVideoViewDelegate {
 
     public func videoView(_: RTCVideoRenderer, didChangeVideoSize size: CGSize) {
-//        // let orientation = UIDevice.current.orientation
-//        self.size = size
-//
-////        UIView.animate(withDuration: 0.4) {
-//            let defaultAspectRatio = CGSize(width: 4, height: 3)
-//            let aspectRatio = size == .zero ? defaultAspectRatio : size
-//            let videoFrame = AVMakeRect(aspectRatio: aspectRatio, insideRect: self.bounds)
-//
-//            let rendererView = self.renderer as! NativeView
-//            rendererView.widthAnchor.constraint(equalToConstant: videoFrame.width).isActive = true
-//            rendererView.heightAnchor.constraint(equalToConstant: videoFrame.height).isActive = true
-//
-//#if !os(macOS)
-//        self.layoutIfNeeded()
-//#else
-//        self.layoutSubtreeIfNeeded()
-//#endif
-//
+        print("VideoView.didChangeVideoSize \(size)")
+        self.videoSize = size
+        shouldLayout()
     }
 }

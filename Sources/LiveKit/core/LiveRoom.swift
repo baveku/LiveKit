@@ -15,16 +15,21 @@ public class LiveRoom: MulticastDelegate<LiveRoomDelegate> {
     public private(set) var remoteParticipants = [Sid: RemoteParticipant]()
     public private(set) var activeSpeakers: [Participant] = []
     public private(set) var isEnabledVideo = false
-    private var lastPathUpdate: TimeInterval = 0
-    internal let engine: Engine
+
+    internal lazy var engine = Engine(delegate: self)
     public var state: ConnectionState {
         engine.connectionState
     }
-
-    public init(connectOptions: ConnectOptions, delegate: LiveRoomDelegate?) {
-        engine = Engine(connectOptions: connectOptions)
+    
+    public let host: String
+    
+    var url: String {
+        return host
+    }
+    
+    public init(host: String, delegate: LiveRoomDelegate? = nil) {
+        self.host = host
         super.init()
-        engine.add(delegate: self)
 
         if let delegate = delegate {
             add(delegate: delegate)
@@ -32,19 +37,28 @@ public class LiveRoom: MulticastDelegate<LiveRoomDelegate> {
     }
 
     deinit {
-        engine.remove(delegate: self)
+        // not really required to remove delegate since it's weak
+        // engine.remove(delegate: self)
     }
 
     @discardableResult
-    public func connect() -> Promise<LiveRoom> {
+    public func connect(token: String, options: ConnectOptions? = nil) -> Promise<LiveRoom> {
+
         logger.info("connecting to room")
         guard localParticipant == nil else {
             return Promise(EngineError.invalidState("localParticipant is not nil"))
         }
-        
-        return engine.connect().then {
+        return engine.connect(url,
+                              token,
+                              options: options).then {
             self
         }
+
+    }
+    
+    @discardableResult
+    public func join(_ token: String, options: ConnectOptions? = nil) -> Promise<LiveRoom> {
+        connect(token: token, options: options)
     }
 
     public func disconnect() {
@@ -58,10 +72,10 @@ public class LiveRoom: MulticastDelegate<LiveRoomDelegate> {
         guard let localParticipant = localParticipant else {
             return
         }
-        if let videoTrack = localParticipant.videoTracks.first(where: {$0.value.track?.name == "localVideo"})?.value.track as? LocalVideoTrack {
-            notify({$0.room(self, participant: localParticipant, didDisabledVideo: videoTrack)})
+        if let publication = localParticipant.videoTracks.first(where: {$0.value.track?.name == "localVideo"})?.value as? LocalTrackPublication, let track = publication.track as? LocalVideoTrack {
+            notify({$0.room(self, participant: localParticipant, didDisabledVideo: track )})
             DispatchQueue.global(qos: .background).async {
-                try? localParticipant.unpublishTrack(track: videoTrack)
+                try? localParticipant.unpublish(publication: publication)
             }
         }
     }
@@ -101,9 +115,9 @@ public class LiveRoom: MulticastDelegate<LiveRoomDelegate> {
     
     public func disableAudio() {
         guard let localParticipant = localParticipant else {return}
-        if let audioTrack = localParticipant.audioTracks.first(where: {$0.value.track?.name == "localAudio"})?.value.track as? LocalAudioTrack {
+        if let audioPublication = localParticipant.audioTracks.first(where: {$0.value.track?.name == "localAudio"})?.value as? LocalTrackPublication, let track = audioPublication.track as? LocalAudioTrack {
             DispatchQueue.global(qos: .background).async {
-                try? localParticipant.unpublishTrack(track: audioTrack)
+                try? localParticipant.unpublish(publication: audioPublication)
             }
         }
         
@@ -115,7 +129,9 @@ public class LiveRoom: MulticastDelegate<LiveRoomDelegate> {
             return
         }
         participant.tracks.values.forEach { publication in
-            participant.unpublishTrack(sid: publication.sid)
+            if let publication = publication as? RemoteTrackPublication {
+                participant.unpublish(publication: publication)
+            }
         }
 
         notify { $0.room(self, participantDidLeave: participant) }

@@ -13,8 +13,8 @@ class SignalClient: MulticastDelegate<SignalClientDelegate> {
         close()
     }
     
-    func makeSocket(options: ConnectOptions, reconnect: Bool = false) {
-        let rtcUrl = try! options.buildUrl(reconnect: reconnect)
+    func makeSocket(url: String, token: String, options: ConnectOptions? = nil, reconnect: Bool = false) {
+        let rtcUrl = try! Utils.buildUrl(url, token, options: options, reconnect: reconnect)
         logger.debug("connecting with url: \(rtcUrl)")
         self.webSocket?.forceDisconnect()
         let webSocket = WebSocket(request: .init(url: rtcUrl))
@@ -22,9 +22,12 @@ class SignalClient: MulticastDelegate<SignalClientDelegate> {
         self.webSocket = webSocket
     }
 
-    func connect(options: ConnectOptions, reconnect: Bool = false) -> Promise<Livekit_JoinResponse> {
+    func connect(_ url: String,
+                 _ token: String,
+                 options: ConnectOptions? = nil,
+                 reconnect: Bool = false) -> Promise<Livekit_JoinResponse> {
         Promise<Void> { () -> Void in
-            self.makeSocket(options: options, reconnect: reconnect)
+            self.makeSocket(url: url, token: token, options: options, reconnect: reconnect)
         }.then {
             self.connectAndWaitReceiveJoinResponse()
         }
@@ -66,6 +69,7 @@ class SignalClient: MulticastDelegate<SignalClientDelegate> {
         connectionState = .disconnected()
         webSocket?.forceDisconnect()
         webSocket = nil
+        connectionState = .disconnected()
     }
 
     // handle errors after already connected
@@ -193,18 +197,14 @@ extension SignalClient {
     }
 
     func sendAddTrack(cid: String, name: String, type: Livekit_TrackType,
-                      dimensions: Dimensions? = nil) {
+                      _ populator: (inout Livekit_AddTrackRequest) -> ()) {
         logger.debug("[SignalClient] Sending add track request")
-
         let r = Livekit_SignalRequest.with {
             $0.addTrack = Livekit_AddTrackRequest.with {
+                populator(&$0)
                 $0.cid = cid
                 $0.name = name
                 $0.type = type
-                if let dimensions = dimensions {
-                    $0.width = UInt32(dimensions.width)
-                    $0.height = UInt32(dimensions.height)
-                }
             }
         }
 

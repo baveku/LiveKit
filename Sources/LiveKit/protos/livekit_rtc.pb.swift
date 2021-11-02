@@ -181,15 +181,6 @@ struct Livekit_SignalRequest {
         set {message = .leave(newValue)}
     }
 
-    /// Set active published layers
-    var simulcast: Livekit_SetSimulcastLayers {
-        get {
-            if case .simulcast(let v)? = message {return v}
-            return Livekit_SetSimulcastLayers()
-        }
-        set {message = .simulcast(newValue)}
-    }
-
     var unknownFields = SwiftProtobuf.UnknownStorage()
 
     enum OneOf_Message: Equatable {
@@ -207,8 +198,6 @@ struct Livekit_SignalRequest {
         case trackSetting(Livekit_UpdateTrackSettings)
         /// Immediately terminate session
         case leave(Livekit_LeaveRequest)
-        /// Set active published layers
-        case simulcast(Livekit_SetSimulcastLayers)
 
         #if !swift(>=4.1)
         static func ==(lhs: Livekit_SignalRequest.OneOf_Message, rhs: Livekit_SignalRequest.OneOf_Message) -> Bool {
@@ -246,10 +235,6 @@ struct Livekit_SignalRequest {
             }()
             case (.leave, .leave): return {
                 guard case .leave(let l) = lhs, case .leave(let r) = rhs else { preconditionFailure() }
-                return l == r
-            }()
-            case (.simulcast, .simulcast): return {
-                guard case .simulcast(let l) = lhs, case .simulcast(let r) = rhs else { preconditionFailure() }
                 return l == r
             }()
             default: return false
@@ -456,6 +441,11 @@ struct Livekit_AddTrackRequest {
     /// true to add track and initialize to muted
     var muted: Bool = false
 
+    /// true if DTX (Discontinuous Transmission) is disabled for audio
+    var disableDtx: Bool = false
+
+    var source: Livekit_TrackSource = .unknown
+
     var unknownFields = SwiftProtobuf.UnknownStorage()
 
     init() {}
@@ -483,20 +473,6 @@ struct Livekit_MuteTrackRequest {
     var sid: String = String()
 
     var muted: Bool = false
-
-    var unknownFields = SwiftProtobuf.UnknownStorage()
-
-    init() {}
-}
-
-struct Livekit_SetSimulcastLayers {
-    // SwiftProtobuf.Message conformance is added in an extension below. See the
-    // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
-    // methods supported on all messages.
-
-    var trackSid: String = String()
-
-    var layers: [Livekit_VideoQuality] = []
 
     var unknownFields = SwiftProtobuf.UnknownStorage()
 
@@ -545,6 +521,13 @@ struct Livekit_JoinResponse {
     var subscriberPrimary: Bool {
         get {return _storage._subscriberPrimary}
         set {_uniqueStorage()._subscriberPrimary = newValue}
+    }
+
+    /// when the current server isn't available, return alternate url to retry connection
+    /// when this is set, the other fields will be largely empty
+    var alternativeURL: String {
+        get {return _storage._alternativeURL}
+        set {_uniqueStorage()._alternativeURL = newValue}
     }
 
     var unknownFields = SwiftProtobuf.UnknownStorage()
@@ -625,9 +608,17 @@ struct Livekit_UpdateTrackSettings {
 
     var trackSids: [String] = []
 
+    /// when true, the track is placed in a paused state, with no new data returned
     var disabled: Bool = false
 
+    /// deprecated in favor of width & height
     var quality: Livekit_VideoQuality = .low
+
+    /// for video, width to receive
+    var width: UInt32 = 0
+
+    /// for video, height to receive
+    var height: UInt32 = 0
 
     var unknownFields = SwiftProtobuf.UnknownStorage()
 
@@ -726,8 +717,7 @@ extension Livekit_SignalRequest: SwiftProtobuf.Message, SwiftProtobuf._MessageIm
         5: .same(proto: "mute"),
         6: .same(proto: "subscription"),
         7: .standard(proto: "track_setting"),
-        8: .same(proto: "leave"),
-        9: .same(proto: "simulcast")
+        8: .same(proto: "leave")
     ]
 
     mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
@@ -840,19 +830,6 @@ extension Livekit_SignalRequest: SwiftProtobuf.Message, SwiftProtobuf._MessageIm
                     self.message = .leave(v)
                 }
             }()
-            case 9: try {
-                var v: Livekit_SetSimulcastLayers?
-                var hadOneofValue = false
-                if let current = self.message {
-                    hadOneofValue = true
-                    if case .simulcast(let m) = current {v = m}
-                }
-                try decoder.decodeSingularMessageField(value: &v)
-                if let v = v {
-                    if hadOneofValue {try decoder.handleConflictingOneOf()}
-                    self.message = .simulcast(v)
-                }
-            }()
             default: break
             }
         }
@@ -895,10 +872,6 @@ extension Livekit_SignalRequest: SwiftProtobuf.Message, SwiftProtobuf._MessageIm
         case .leave?: try {
             guard case .leave(let v)? = self.message else { preconditionFailure() }
             try visitor.visitSingularMessageField(value: v, fieldNumber: 8)
-        }()
-        case .simulcast?: try {
-            guard case .simulcast(let v)? = self.message else { preconditionFailure() }
-            try visitor.visitSingularMessageField(value: v, fieldNumber: 9)
         }()
         case nil: break
         }
@@ -1134,7 +1107,9 @@ extension Livekit_AddTrackRequest: SwiftProtobuf.Message, SwiftProtobuf._Message
         3: .same(proto: "type"),
         4: .same(proto: "width"),
         5: .same(proto: "height"),
-        6: .same(proto: "muted")
+        6: .same(proto: "muted"),
+        7: .standard(proto: "disable_dtx"),
+        8: .same(proto: "source")
     ]
 
     mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
@@ -1149,6 +1124,8 @@ extension Livekit_AddTrackRequest: SwiftProtobuf.Message, SwiftProtobuf._Message
             case 4: try { try decoder.decodeSingularUInt32Field(value: &self.width) }()
             case 5: try { try decoder.decodeSingularUInt32Field(value: &self.height) }()
             case 6: try { try decoder.decodeSingularBoolField(value: &self.muted) }()
+            case 7: try { try decoder.decodeSingularBoolField(value: &self.disableDtx) }()
+            case 8: try { try decoder.decodeSingularEnumField(value: &self.source) }()
             default: break
             }
         }
@@ -1173,6 +1150,12 @@ extension Livekit_AddTrackRequest: SwiftProtobuf.Message, SwiftProtobuf._Message
         if self.muted != false {
             try visitor.visitSingularBoolField(value: self.muted, fieldNumber: 6)
         }
+        if self.disableDtx != false {
+            try visitor.visitSingularBoolField(value: self.disableDtx, fieldNumber: 7)
+        }
+        if self.source != .unknown {
+            try visitor.visitSingularEnumField(value: self.source, fieldNumber: 8)
+        }
         try unknownFields.traverse(visitor: &visitor)
     }
 
@@ -1183,6 +1166,8 @@ extension Livekit_AddTrackRequest: SwiftProtobuf.Message, SwiftProtobuf._Message
         if lhs.width != rhs.width {return false}
         if lhs.height != rhs.height {return false}
         if lhs.muted != rhs.muted {return false}
+        if lhs.disableDtx != rhs.disableDtx {return false}
+        if lhs.source != rhs.source {return false}
         if lhs.unknownFields != rhs.unknownFields {return false}
         return true
     }
@@ -1264,44 +1249,6 @@ extension Livekit_MuteTrackRequest: SwiftProtobuf.Message, SwiftProtobuf._Messag
     }
 }
 
-extension Livekit_SetSimulcastLayers: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
-    static let protoMessageName: String = _protobuf_package + ".SetSimulcastLayers"
-    static let _protobuf_nameMap: SwiftProtobuf._NameMap = [
-        1: .standard(proto: "track_sid"),
-        2: .same(proto: "layers")
-    ]
-
-    mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
-        while let fieldNumber = try decoder.nextFieldNumber() {
-            // The use of inline closures is to circumvent an issue where the compiler
-            // allocates stack space for every case branch when no optimizations are
-            // enabled. https://github.com/apple/swift-protobuf/issues/1034
-            switch fieldNumber {
-            case 1: try { try decoder.decodeSingularStringField(value: &self.trackSid) }()
-            case 2: try { try decoder.decodeRepeatedEnumField(value: &self.layers) }()
-            default: break
-            }
-        }
-    }
-
-    func traverse<V: SwiftProtobuf.Visitor>(visitor: inout V) throws {
-        if !self.trackSid.isEmpty {
-            try visitor.visitSingularStringField(value: self.trackSid, fieldNumber: 1)
-        }
-        if !self.layers.isEmpty {
-            try visitor.visitPackedEnumField(value: self.layers, fieldNumber: 2)
-        }
-        try unknownFields.traverse(visitor: &visitor)
-    }
-
-    static func ==(lhs: Livekit_SetSimulcastLayers, rhs: Livekit_SetSimulcastLayers) -> Bool {
-        if lhs.trackSid != rhs.trackSid {return false}
-        if lhs.layers != rhs.layers {return false}
-        if lhs.unknownFields != rhs.unknownFields {return false}
-        return true
-    }
-}
-
 extension Livekit_JoinResponse: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
     static let protoMessageName: String = _protobuf_package + ".JoinResponse"
     static let _protobuf_nameMap: SwiftProtobuf._NameMap = [
@@ -1310,7 +1257,8 @@ extension Livekit_JoinResponse: SwiftProtobuf.Message, SwiftProtobuf._MessageImp
         3: .standard(proto: "other_participants"),
         4: .standard(proto: "server_version"),
         5: .standard(proto: "ice_servers"),
-        6: .standard(proto: "subscriber_primary")
+        6: .standard(proto: "subscriber_primary"),
+        7: .standard(proto: "alternative_url")
     ]
 
     fileprivate class _StorageClass {
@@ -1320,6 +1268,7 @@ extension Livekit_JoinResponse: SwiftProtobuf.Message, SwiftProtobuf._MessageImp
         var _serverVersion: String = String()
         var _iceServers: [Livekit_ICEServer] = []
         var _subscriberPrimary: Bool = false
+        var _alternativeURL: String = String()
 
         static let defaultInstance = _StorageClass()
 
@@ -1332,6 +1281,7 @@ extension Livekit_JoinResponse: SwiftProtobuf.Message, SwiftProtobuf._MessageImp
             _serverVersion = source._serverVersion
             _iceServers = source._iceServers
             _subscriberPrimary = source._subscriberPrimary
+            _alternativeURL = source._alternativeURL
         }
     }
 
@@ -1356,6 +1306,7 @@ extension Livekit_JoinResponse: SwiftProtobuf.Message, SwiftProtobuf._MessageImp
                 case 4: try { try decoder.decodeSingularStringField(value: &_storage._serverVersion) }()
                 case 5: try { try decoder.decodeRepeatedMessageField(value: &_storage._iceServers) }()
                 case 6: try { try decoder.decodeSingularBoolField(value: &_storage._subscriberPrimary) }()
+                case 7: try { try decoder.decodeSingularStringField(value: &_storage._alternativeURL) }()
                 default: break
                 }
             }
@@ -1386,6 +1337,9 @@ extension Livekit_JoinResponse: SwiftProtobuf.Message, SwiftProtobuf._MessageImp
             if _storage._subscriberPrimary != false {
                 try visitor.visitSingularBoolField(value: _storage._subscriberPrimary, fieldNumber: 6)
             }
+            if !_storage._alternativeURL.isEmpty {
+                try visitor.visitSingularStringField(value: _storage._alternativeURL, fieldNumber: 7)
+            }
         }
         try unknownFields.traverse(visitor: &visitor)
     }
@@ -1401,6 +1355,7 @@ extension Livekit_JoinResponse: SwiftProtobuf.Message, SwiftProtobuf._MessageImp
                 if _storage._serverVersion != rhs_storage._serverVersion {return false}
                 if _storage._iceServers != rhs_storage._iceServers {return false}
                 if _storage._subscriberPrimary != rhs_storage._subscriberPrimary {return false}
+                if _storage._alternativeURL != rhs_storage._alternativeURL {return false}
                 return true
             }
             if !storagesAreEqual {return false}
@@ -1565,7 +1520,9 @@ extension Livekit_UpdateTrackSettings: SwiftProtobuf.Message, SwiftProtobuf._Mes
     static let _protobuf_nameMap: SwiftProtobuf._NameMap = [
         1: .standard(proto: "track_sids"),
         3: .same(proto: "disabled"),
-        4: .same(proto: "quality")
+        4: .same(proto: "quality"),
+        5: .same(proto: "width"),
+        6: .same(proto: "height")
     ]
 
     mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
@@ -1577,6 +1534,8 @@ extension Livekit_UpdateTrackSettings: SwiftProtobuf.Message, SwiftProtobuf._Mes
             case 1: try { try decoder.decodeRepeatedStringField(value: &self.trackSids) }()
             case 3: try { try decoder.decodeSingularBoolField(value: &self.disabled) }()
             case 4: try { try decoder.decodeSingularEnumField(value: &self.quality) }()
+            case 5: try { try decoder.decodeSingularUInt32Field(value: &self.width) }()
+            case 6: try { try decoder.decodeSingularUInt32Field(value: &self.height) }()
             default: break
             }
         }
@@ -1592,6 +1551,12 @@ extension Livekit_UpdateTrackSettings: SwiftProtobuf.Message, SwiftProtobuf._Mes
         if self.quality != .low {
             try visitor.visitSingularEnumField(value: self.quality, fieldNumber: 4)
         }
+        if self.width != 0 {
+            try visitor.visitSingularUInt32Field(value: self.width, fieldNumber: 5)
+        }
+        if self.height != 0 {
+            try visitor.visitSingularUInt32Field(value: self.height, fieldNumber: 6)
+        }
         try unknownFields.traverse(visitor: &visitor)
     }
 
@@ -1599,6 +1564,8 @@ extension Livekit_UpdateTrackSettings: SwiftProtobuf.Message, SwiftProtobuf._Mes
         if lhs.trackSids != rhs.trackSids {return false}
         if lhs.disabled != rhs.disabled {return false}
         if lhs.quality != rhs.quality {return false}
+        if lhs.width != rhs.width {return false}
+        if lhs.height != rhs.height {return false}
         if lhs.unknownFields != rhs.unknownFields {return false}
         return true
     }

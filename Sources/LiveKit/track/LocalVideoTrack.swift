@@ -1,7 +1,5 @@
-import Foundation
 import WebRTC
-import AVFoundation
-import CoreMedia
+import Promises
 
 extension CMVideoDimensions {
 
@@ -15,6 +13,8 @@ public class LocalVideoTrack: VideoTrack {
     public var capturer: RTCVideoCapturer
     public var source: RTCVideoSource
     public let dimensions: Dimensions
+
+//    public typealias CreateCapturerResult = (capturer: ReplayKitCapturer, source: RTCVideoSource)
 
     init(rtcTrack: RTCVideoTrack,
          capturer: RTCVideoCapturer,
@@ -36,7 +36,10 @@ public class LocalVideoTrack: VideoTrack {
 
         let source = Engine.factory.videoSource()
         let capturer = RTCCameraVideoCapturer(delegate: source)
-        let possibleDevice = RTCCameraVideoCapturer.captureDevices().first { $0.position == options.position }
+        let possibleDevice = RTCCameraVideoCapturer.captureDevices().first {
+            // TODO: FaceTime Camera for macOS uses .unspecified
+            $0.position == options.position || $0.position == .unspecified
+        }
 
         guard let device = possibleDevice else {
             throw TrackError.mediaError("No \(options.position) video capture devices available.")
@@ -125,31 +128,32 @@ public class LocalVideoTrack: VideoTrack {
         // Set the new track
         sender?.track = result.rtcTrack
     }
-//    #if canImport(ReplayKit)
-//    public static func createReplayKitTrack(name: String,
-//                                            options: LocalVideoTrackOptions = LocalVideoTrackOptions()) throws -> LocalVideoTrack {
-//
-//        let source = Engine.factory.videoSource()
-//        let capturer = ReplayKitCapturer(source: source)
-//        let rtcTrack = Engine.factory.videoTrack(with: source, trackId: UUID().uuidString)
-//        rtcTrack.isEnabled = true
-//
-//#if !os(macOS)
-//        let videoSize = Dimensions(
-//            width: Int(UIScreen.main.bounds.size.width * UIScreen.main.scale),
-//            height: Int(UIScreen.main.bounds.size.height * UIScreen.main.scale)
-//        )
-//#else
-//        let videoSize = Dimensions(width: 0, height: 0)
-//#endif
-//
-//        return LocalVideoTrack(
-//            rtcTrack: rtcTrack,
-//            capturer: capturer,
-//            source: source,
-//            name: name,
-//            dimensions: videoSize
-//        )
-//    }
-//    #endif
+
+    @discardableResult
+    public override func stop() -> Promise<Void> {
+        Promise<Void> { resolve, _ in
+            // if the capturer is a RTCCameraVideoCapturer,
+            // wait for it to fully stop.
+            if let capturer = self.capturer as? RTCCameraVideoCapturer {
+                capturer.stopCapture { resolve(()) }
+            } else {
+                resolve(())
+            }
+        }.then {
+            super.stop()
+        }
+    }
+
+    public static func createCameraTrack(name: String,
+                                         options: LocalVideoTrackOptions = LocalVideoTrackOptions()) throws -> LocalVideoTrack {
+
+        let result = try createCapturer(options: options)
+        return LocalVideoTrack(
+            rtcTrack: result.rtcTrack,
+            capturer: result.capturer,
+            source: result.source,
+            name: name,
+            dimensions: result.selectedDimensions
+        )
+    }
 }

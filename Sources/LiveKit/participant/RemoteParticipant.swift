@@ -1,5 +1,6 @@
 import Foundation
 import WebRTC
+import Promises
 
 public class RemoteParticipant: Participant {
 
@@ -36,12 +37,15 @@ public class RemoteParticipant: Participant {
         if hadInfo {
             // ensure we are updating only tracks published since joining
             for publication in newTrackPublications.values {
-                sendTrackPublishedEvent(publication: publication)
+                notify { $0.participant(self, didPublish: publication) }
+                room?.notify { $0.room(self.room!, participant: self, didPublish: publication) }
             }
         }
 
         for publication in tracks.values where validTrackPublications[publication.sid] == nil {
-            unpublishTrack(sid: publication.sid, sendUnpublish: true)
+            if let publication = publication as? RemoteTrackPublication {
+                unpublish(publication: publication, shouldNotify: true)
+            }
         }
     }
 
@@ -65,9 +69,9 @@ public class RemoteParticipant: Participant {
 
         switch rtcTrack.kind {
         case "audio":
-            track = AudioTrack(rtcTrack: rtcTrack as! RTCAudioTrack, name: publication.name)
+            track = RemoteAudioTrack(rtcTrack: rtcTrack as! RTCAudioTrack, name: publication.name)
         case "video":
-            track = VideoTrack(rtcTrack: rtcTrack as! RTCVideoTrack, name: publication.name)
+            track = RemoteVideoTrack(rtcTrack: rtcTrack as! RTCVideoTrack, name: publication.name)
         default:
             let err = TrackError.invalidTrackType("unsupported type: \(rtcTrack.kind.description)")
             notify { $0.participant(self, didFailToSubscribe: sid, error: err) }
@@ -84,25 +88,33 @@ public class RemoteParticipant: Participant {
         room?.notify { $0.room(self.room!, participant: self, didSubscribe: publication, track: track) }
     }
 
-    func unpublishTrack(sid: String, sendUnpublish: Bool = false) {
+    func unpublish(publication: RemoteTrackPublication, shouldNotify: Bool = true) -> Promise<Void> {
 
-        guard let publication = tracks.removeValue(forKey: sid) as? RemoteTrackPublication else {
-            return
+        func notifyUnpublish() -> Promise<Void> {
+            Promise<Void> {
+                guard shouldNotify else { return }
+                // notify unpublish
+                self.notify { $0.participant(self, didUnpublish: publication) }
+                self.room?.notify { $0.room(self.room!, participant: self, didUnpublish: publication) }
+            }
         }
 
-        if let track = publication.track {
-            track.stop()
-            notify { $0.participant(self, didUnsubscribe: publication, track: track) }
-            room?.notify { $0.room(self.room!, participant: self, didUnsubscribe: publication) }
-        }
-        if sendUnpublish {
-            notify { $0.participant(self, didUnpublish: publication) }
-            room?.notify { $0.room(self.room!, participant: self, didUnpublish: publication) }
-        }
-    }
+        // remove the publication
+        tracks.removeValue(forKey: publication.sid)
 
-    private func sendTrackPublishedEvent(publication: RemoteTrackPublication) {
-        notify { $0.participant(self, didPublish: publication) }
-        room?.notify { $0.room(self.room!, participant: self, didPublish: publication) }
+        // continue if the publication has a track
+        guard let track = publication.track else {
+            // if track is nil, only notify unpublish
+            return notifyUnpublish()
+        }
+
+        return track.stop().then { _ in
+            guard shouldNotify else { return }
+            // notify unsubscribe
+            self.notify { $0.participant(self, didUnsubscribe: publication, track: track) }
+            self.room?.notify { $0.room(self.room!, participant: self, didUnsubscribe: publication) }
+        }.then {
+            notifyUnpublish()
+        }
     }
 }

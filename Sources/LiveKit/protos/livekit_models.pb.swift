@@ -64,6 +64,54 @@ extension Livekit_TrackType: CaseIterable {
 
 #endif  // swift(>=4.2)
 
+enum Livekit_TrackSource: SwiftProtobuf.Enum {
+    typealias RawValue = Int
+    case unknown // = 0
+    case camera // = 1
+    case microphone // = 2
+    case screenShare // = 3
+    case UNRECOGNIZED(Int)
+
+    init() {
+        self = .unknown
+    }
+
+    init?(rawValue: Int) {
+        switch rawValue {
+        case 0: self = .unknown
+        case 1: self = .camera
+        case 2: self = .microphone
+        case 3: self = .screenShare
+        default: self = .UNRECOGNIZED(rawValue)
+        }
+    }
+
+    var rawValue: Int {
+        switch self {
+        case .unknown: return 0
+        case .camera: return 1
+        case .microphone: return 2
+        case .screenShare: return 3
+        case .UNRECOGNIZED(let i): return i
+        }
+    }
+
+}
+
+#if swift(>=4.2)
+
+extension Livekit_TrackSource: CaseIterable {
+    // The compiler won't synthesize support with the UNRECOGNIZED case.
+    static var allCases: [Livekit_TrackSource] = [
+        .unknown,
+        .camera,
+        .microphone,
+        .screenShare
+    ]
+}
+
+#endif  // swift(>=4.2)
+
 struct Livekit_Room {
     // SwiftProtobuf.Message conformance is added in an extension below. See the
     // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
@@ -210,6 +258,12 @@ struct Livekit_TrackInfo {
 
     /// true if track is simulcasted
     var simulcast: Bool = false
+
+    /// true if DTX (Discontinuous Transmission) is disabled for audio
+    var disableDtx: Bool = false
+
+    /// source of media
+    var source: Livekit_TrackSource = .unknown
 
     var unknownFields = SwiftProtobuf.UnknownStorage()
 
@@ -360,24 +414,6 @@ struct Livekit_UserPacket {
     init() {}
 }
 
-struct Livekit_RecordingResult {
-    // SwiftProtobuf.Message conformance is added in an extension below. See the
-    // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
-    // methods supported on all messages.
-
-    var id: String = String()
-
-    var error: String = String()
-
-    var duration: Int64 = 0
-
-    var location: String = String()
-
-    var unknownFields = SwiftProtobuf.UnknownStorage()
-
-    init() {}
-}
-
 // MARK: - Code below here is support for the SwiftProtobuf runtime.
 
 private let _protobuf_package = "livekit"
@@ -387,6 +423,15 @@ extension Livekit_TrackType: SwiftProtobuf._ProtoNameProviding {
         0: .same(proto: "AUDIO"),
         1: .same(proto: "VIDEO"),
         2: .same(proto: "DATA")
+    ]
+}
+
+extension Livekit_TrackSource: SwiftProtobuf._ProtoNameProviding {
+    static let _protobuf_nameMap: SwiftProtobuf._NameMap = [
+        0: .same(proto: "UNKNOWN"),
+        1: .same(proto: "CAMERA"),
+        2: .same(proto: "MICROPHONE"),
+        3: .same(proto: "SCREEN_SHARE")
     ]
 }
 
@@ -594,7 +639,9 @@ extension Livekit_TrackInfo: SwiftProtobuf.Message, SwiftProtobuf._MessageImplem
         4: .same(proto: "muted"),
         5: .same(proto: "width"),
         6: .same(proto: "height"),
-        7: .same(proto: "simulcast")
+        7: .same(proto: "simulcast"),
+        8: .standard(proto: "disable_dtx"),
+        9: .same(proto: "source")
     ]
 
     mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
@@ -610,6 +657,8 @@ extension Livekit_TrackInfo: SwiftProtobuf.Message, SwiftProtobuf._MessageImplem
             case 5: try { try decoder.decodeSingularUInt32Field(value: &self.width) }()
             case 6: try { try decoder.decodeSingularUInt32Field(value: &self.height) }()
             case 7: try { try decoder.decodeSingularBoolField(value: &self.simulcast) }()
+            case 8: try { try decoder.decodeSingularBoolField(value: &self.disableDtx) }()
+            case 9: try { try decoder.decodeSingularEnumField(value: &self.source) }()
             default: break
             }
         }
@@ -637,6 +686,12 @@ extension Livekit_TrackInfo: SwiftProtobuf.Message, SwiftProtobuf._MessageImplem
         if self.simulcast != false {
             try visitor.visitSingularBoolField(value: self.simulcast, fieldNumber: 7)
         }
+        if self.disableDtx != false {
+            try visitor.visitSingularBoolField(value: self.disableDtx, fieldNumber: 8)
+        }
+        if self.source != .unknown {
+            try visitor.visitSingularEnumField(value: self.source, fieldNumber: 9)
+        }
         try unknownFields.traverse(visitor: &visitor)
     }
 
@@ -648,6 +703,8 @@ extension Livekit_TrackInfo: SwiftProtobuf.Message, SwiftProtobuf._MessageImplem
         if lhs.width != rhs.width {return false}
         if lhs.height != rhs.height {return false}
         if lhs.simulcast != rhs.simulcast {return false}
+        if lhs.disableDtx != rhs.disableDtx {return false}
+        if lhs.source != rhs.source {return false}
         if lhs.unknownFields != rhs.unknownFields {return false}
         return true
     }
@@ -851,56 +908,6 @@ extension Livekit_UserPacket: SwiftProtobuf.Message, SwiftProtobuf._MessageImple
         if lhs.participantSid != rhs.participantSid {return false}
         if lhs.payload != rhs.payload {return false}
         if lhs.destinationSids != rhs.destinationSids {return false}
-        if lhs.unknownFields != rhs.unknownFields {return false}
-        return true
-    }
-}
-
-extension Livekit_RecordingResult: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
-    static let protoMessageName: String = _protobuf_package + ".RecordingResult"
-    static let _protobuf_nameMap: SwiftProtobuf._NameMap = [
-        1: .same(proto: "id"),
-        2: .same(proto: "error"),
-        3: .same(proto: "duration"),
-        4: .same(proto: "location")
-    ]
-
-    mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
-        while let fieldNumber = try decoder.nextFieldNumber() {
-            // The use of inline closures is to circumvent an issue where the compiler
-            // allocates stack space for every case branch when no optimizations are
-            // enabled. https://github.com/apple/swift-protobuf/issues/1034
-            switch fieldNumber {
-            case 1: try { try decoder.decodeSingularStringField(value: &self.id) }()
-            case 2: try { try decoder.decodeSingularStringField(value: &self.error) }()
-            case 3: try { try decoder.decodeSingularInt64Field(value: &self.duration) }()
-            case 4: try { try decoder.decodeSingularStringField(value: &self.location) }()
-            default: break
-            }
-        }
-    }
-
-    func traverse<V: SwiftProtobuf.Visitor>(visitor: inout V) throws {
-        if !self.id.isEmpty {
-            try visitor.visitSingularStringField(value: self.id, fieldNumber: 1)
-        }
-        if !self.error.isEmpty {
-            try visitor.visitSingularStringField(value: self.error, fieldNumber: 2)
-        }
-        if self.duration != 0 {
-            try visitor.visitSingularInt64Field(value: self.duration, fieldNumber: 3)
-        }
-        if !self.location.isEmpty {
-            try visitor.visitSingularStringField(value: self.location, fieldNumber: 4)
-        }
-        try unknownFields.traverse(visitor: &visitor)
-    }
-
-    static func ==(lhs: Livekit_RecordingResult, rhs: Livekit_RecordingResult) -> Bool {
-        if lhs.id != rhs.id {return false}
-        if lhs.error != rhs.error {return false}
-        if lhs.duration != rhs.duration {return false}
-        if lhs.location != rhs.location {return false}
         if lhs.unknownFields != rhs.unknownFields {return false}
         return true
     }

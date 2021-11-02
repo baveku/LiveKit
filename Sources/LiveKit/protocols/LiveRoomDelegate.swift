@@ -83,6 +83,11 @@ public protocol LiveRoomDelegate {
     func room(_ room: LiveRoom, participant: RemoteParticipant, didReceive data: Data)
     
     /// Received first frame from local
+    //    /// Same with ``ParticipantDelegate/localParticipant(_:didPublish:)-90j2m``.
+    func room(_ room: LiveRoom, localParticipant: LocalParticipant, didPublish trackPublication: LocalTrackPublication)
+    //
+    //    /// Same with ``ParticipantDelegate/participant(_:didUnpublish:)-3bkga``.
+    func room(_ room: LiveRoom, localParticipant: LocalParticipant, didUnpublish trackPublication: LocalTrackPublication)
     func room(_ room: LiveRoom, participant: LocalParticipant, didEnabledVideo videoTrack: LocalVideoTrack)
     func room(_ room: LiveRoom, participant: LocalParticipant, didDisabledVideo videoTrack: LocalVideoTrack)
     
@@ -109,4 +114,7 @@ public extension LiveRoomDelegate {
     func room(_ room: LiveRoom, participant: LocalParticipant, didDisabledVideo videoTrack: LocalVideoTrack) {}
     
     func room(_ room: LiveRoom, participant: LocalParticipant, didChangeLocalAudioStatus isMuted: Bool) {}
+    
+    func room(_ room: LiveRoom, localParticipant: LocalParticipant, didPublish trackPublication: LocalTrackPublication) {}
+    func room(_ room: LiveRoom, localParticipant: LocalParticipant, didUnpublish trackPublication: LocalTrackPublication) {}
 }
