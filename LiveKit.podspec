@@ -16,7 +16,7 @@ Pod::Spec.new do |spec|
   #
 
   spec.name         = 'LiveKit'
-  spec.version      = '0.8.6'
+  spec.version      = '0.8.7'
   spec.summary      = 'A short description of LiveKit'
 
   # This description is used to generate tags and improve search results.
@@ -67,7 +67,8 @@ Pod::Spec.new do |spec|
   spec.ios.deployment_target = "10.0"
   spec.osx.deployment_target = "11.0"
 
-
+  spec.ios.vendored_frameworks = 'LiveKit.xcframework'
+  spec.ios.vendored_frameworks = 'LiveKit.xcframework'
   # ――― Source Location ―――――――――――――――――――――――――――――――――――――――――――――――――――――――――― #
   #
   #  Specify the location from where the source should be retrieved.
