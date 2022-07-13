@@ -83,5 +83,5 @@ Pod::Spec.new do |spec|
   spec.dependency "WebRTC-SDK"
   spec.dependency "SwiftProtobuf"
   spec.dependency "PromisesSwift"
-  spec.dependency "Starscream", "~> 4.0.0"
+  spec.dependency "Starscream"
 end
