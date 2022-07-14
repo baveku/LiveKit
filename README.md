@@ -1,3 +1,6 @@
+# Fork from main sdk
+- Now, we can use this sdk with iOS 11 and iOS 12
+
 # iOS/macOS Swift SDK for LiveKit
 
 Official Client SDK for [LiveKit](https://github.com/livekit/livekit-server).
