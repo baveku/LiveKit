@@ -101,14 +101,14 @@ internal class SignalClient: MulticastDelegate<SignalClientDelegate> {
                     $0.reconnectMode = reconnectMode
                     $0.connectionState = .connecting
                 }
-                return SocketClient.connect(url: url,
+				self.webSocket = SocketClient(url: url,
                                          onMessage: self.onWebSocketMessage,
                                          onDisconnect: { reason in
                                             self.webSocket = nil
                                             self.cleanUp(reason: reason)
                                          })
+				return self.webSocket!.connect()
             }.then(on: .sdk) { (webSocket: SocketClient) -> Void in
-                self.webSocket = webSocket
                 self._state.mutate { $0.connectionState = .connected }
             }.recover(on: .sdk) { error -> Promise<Void> in
                 // Skip validation if reconnect mode

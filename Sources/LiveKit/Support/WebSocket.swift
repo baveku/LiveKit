@@ -25,42 +25,27 @@ internal class SocketClient: NSObject, Loggable {
 	
 	public var onMessage: OnMessage?
 	public var onDisconnect: OnDisconnect?
-	
-	private let queue = DispatchQueue(label: "LiveKitSDK.webSocket", qos: .default)
-	private let operationQueue = OperationQueue()
+
+	private let webSocket: WebSocket
 	private let request: URLRequest
 	
-	private var disconnected = false
 	private var connectPromise: Promise<SocketClient>?
-	lazy var webSocket: WebSocket = {
-		return WebSocket(request: request)
-	}()
-    static func connect(url: URL,
-                        onMessage: OnMessage? = nil,
-                        onDisconnect: OnDisconnect? = nil) -> Promise<SocketClient> {
 
-        return SocketClient(url: url,
-                         onMessage: onMessage,
-                         onDisconnect: onDisconnect).connect()
-    }
-
-    private init(url: URL,
+    init(url: URL,
                  onMessage: OnMessage? = nil,
                  onDisconnect: OnDisconnect? = nil) {
 
-        request = URLRequest(url: url,
-                             cachePolicy: .useProtocolCachePolicy,
-                             timeoutInterval: .defaultSocketConnect)
-
+		request = URLRequest(url: url)
+		self.webSocket = .init(request: request)
         self.onMessage = onMessage
         self.onDisconnect = onDisconnect
         super.init()
-		webSocket.delegate = self
-		webSocket.connect()
+		self.webSocket.delegate = self
     }
 
-    private func connect() -> Promise<SocketClient> {
+    func connect() -> Promise<SocketClient> {
         connectPromise = .pending()
+		webSocket.connect()
         return connectPromise!
     }
 
@@ -68,14 +53,6 @@ internal class SocketClient: NSObject, Loggable {
 
         log("reason: \(String(describing: reason))")
 
-        guard !disconnected else {
-            log("dispose can be called only once", .warning)
-            return
-        }
-
-        // mark as disconnected, this instance cannot be re-used
-        disconnected = true
-		webSocket.disconnect()
         if let promise = connectPromise {
             let sdkError = NetworkError.disconnected(message: "WebSocket disconnected")
             promise.reject(sdkError)
@@ -96,11 +73,10 @@ internal class SocketClient: NSObject, Loggable {
 
 extension SocketClient: WebSocketDelegate {
 	func websocketDidConnect(socket: WebSocketClient) {
-		disconnected = false
 		connectPromise?.fulfill(self)
+		print("DID CONNECTED")
 	}
 	func websocketDidDisconnect(socket: WebSocketClient, error: Error?) {
-		
 		if let error = error {
 			let err = error as NSError
 			let sdkError = NetworkError.disconnected(message: "WebSocket did close with code: \(err.code) reason: \(String(describing: err.localizedDescription))")
