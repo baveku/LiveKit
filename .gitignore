@@ -9,6 +9,6 @@ Documentation
 /build_docs/
 *.doccarchive
 WebRTC.xcframework
-DeliverData
+DerivedData
 Pods
 Podfile.lock
