@@ -16,15 +16,15 @@
 
 public struct ParticipantPermissions: Equatable {
 
-    let canSubscribe: Bool
+    public let canSubscribe: Bool
     /// allow participant to publish new tracks to room
-    let canPublish: Bool
+    public let canPublish: Bool
     /// allow participant to publish data
     let canPublishData: Bool
     /// indicates that it's hidden to others
-    let hidden: Bool
+    public let hidden: Bool
     /// indicates it's a recorder instance
-    let recorder: Bool
+    public let recorder: Bool
 
     public init(canSubscribe: Bool = false,
                 canPublish: Bool = false,
