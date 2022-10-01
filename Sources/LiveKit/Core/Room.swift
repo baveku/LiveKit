@@ -109,6 +109,7 @@ public class Room: MulticastDelegate<RoomDelegate> {
                               connectOptions: connectOptions,
                               roomOptions: roomOptions).then(on: .sdk) { () -> Room in
                                 self.log("connected to \(String(describing: self)) \(String(describing: self.localParticipant))", .info)
+            AudioManager.shared.startMonitoring()
                                 return self
                               }
     }
@@ -122,6 +123,7 @@ public class Room: MulticastDelegate<RoomDelegate> {
         return engine.signalClient.sendLeave()
             .recover(on: .sdk) { self.log("Failed to send leave, error: \($0)") }
             .then(on: .sdk) {
+                AudioManager.shared.stopMonitoring()
                 self.cleanUp(reason: .user)
             }
     }
