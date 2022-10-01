@@ -156,18 +156,16 @@ public class AudioManager: Loggable {
             let configuration = RTCAudioSessionConfiguration.webRTC()
             var categoryOptions: AVAudioSession.CategoryOptions = []
             configuration.category = AVAudioSession.Category.playAndRecord.rawValue
+            categoryOptions = [.allowBluetooth, .allowBluetoothA2DP, .allowAirPlay]
+            if self.preferSpeakerOutput {
+                categoryOptions.insert(.defaultToSpeaker)
+            }
 
             switch newState.trackState {
             case .remoteOnly:
                 configuration.mode = AVAudioSession.Mode.spokenAudio.rawValue
             case  .localOnly, .localAndRemote:
                 configuration.mode = AVAudioSession.Mode.videoChat.rawValue
-                categoryOptions = [.allowBluetooth, .allowBluetoothA2DP]
-
-                if self.preferSpeakerOutput {
-                    categoryOptions.insert(.defaultToSpeaker)
-                }
-
             default:
                 configuration.category = AVAudioSession.Category.soloAmbient.rawValue
                 configuration.mode = AVAudioSession.Mode.default.rawValue
