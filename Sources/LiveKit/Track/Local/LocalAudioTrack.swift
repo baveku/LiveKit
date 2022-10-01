@@ -29,6 +29,26 @@ public class LocalAudioTrack: LocalTrack, AudioTrack {
                    source: source,
                    track: track)
     }
+    
+    @discardableResult
+    internal override func onPublish() -> Promise<Bool> {
+        super.onPublish().then(on: .sdk) { didPublish -> Bool in
+            if didPublish {
+                AudioManager.shared.trackDidStart(.local)
+            }
+            return didPublish
+        }
+    }
+    
+    @discardableResult
+    internal override func onUnpublish() -> Promise<Bool> {
+        super.onUnpublish().then(on: .sdk) { didUnpublish -> Bool in
+            if didUnpublish {
+                AudioManager.shared.trackDidStop(.local)
+            }
+            return didUnpublish
+        }
+    }
 
     public static func createTrack(name: String = Track.microphoneName,
                                    options: AudioCaptureOptions? = nil) -> LocalAudioTrack {
