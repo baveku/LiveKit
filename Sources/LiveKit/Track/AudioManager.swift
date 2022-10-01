@@ -150,23 +150,14 @@ public class AudioManager: Loggable {
             guard let self = self else { return }
 
             // prepare config
-            let configuration = RTCAudioSessionConfiguration.webRTC()
-            var categoryOptions: AVAudioSession.CategoryOptions = []
-            configuration.category = AVAudioSession.Category.playAndRecord.rawValue
-            categoryOptions = [.allowBluetooth, .allowBluetoothA2DP, .allowAirPlay]
-            if self.preferSpeakerOutput {
-                categoryOptions.insert(.defaultToSpeaker)
-            }
-            configuration.categoryOptions = categoryOptions
+            var mode: AVAudioSession.Mode = .spokenAudio
             switch newState.trackState {
             case .remoteOnly:
-                configuration.mode = AVAudioSession.Mode.spokenAudio.rawValue
+                mode = .spokenAudio
             case  .localOnly, .localAndRemote:
-                configuration.mode = AVAudioSession.Mode.videoChat.rawValue
+                mode = .videoChat
             default:
-                configuration.category = AVAudioSession.Category.soloAmbient.rawValue
-                configuration.categoryOptions = []
-                configuration.mode = AVAudioSession.Mode.default.rawValue
+                mode = .default
             }
 
             var setActive: Bool?
@@ -185,13 +176,7 @@ public class AudioManager: Loggable {
             defer { session.unlockForConfiguration() }
 
             do {
-                self.log("configuring audio session with category: \(configuration.category), mode: \(configuration.mode), setActive: \(String(describing: setActive))")
-
-                if let setActive = setActive {
-                    try session.setConfiguration(configuration, active: setActive)
-                } else {
-                    try session.setConfiguration(configuration)
-                }
+                try session.setMode(mode.rawValue)
             } catch let error {
                 self.log("Failed to configureAudioSession with error: \(error)", .error)
             }
@@ -213,6 +198,24 @@ public class AudioManager: Loggable {
     }
     
     func startMonitoring() {
+        DispatchQueue.webRTC.async {
+            // prepare config
+            let configuration = RTCAudioSessionConfiguration.webRTC()
+            var categoryOptions: AVAudioSession.CategoryOptions = []
+            configuration.category = AVAudioSession.Category.playAndRecord.rawValue
+            categoryOptions = [.allowBluetooth, .allowBluetoothA2DP, .allowAirPlay]
+            if self.preferSpeakerOutput {
+                categoryOptions.insert(.defaultToSpeaker)
+            }
+            let session = RTCAudioSession.sharedInstance()
+            session.lockForConfiguration()
+            do {
+                try session.setConfiguration(configuration, active: true)
+            } catch let error {
+                self.log("Failed to configureAudioSession with error: \(error)", .error)
+            }
+            session.unlockForConfiguration()
+        }
         _isActive = true
     }
     
