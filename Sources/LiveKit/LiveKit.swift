@@ -48,7 +48,7 @@ public class LiveKit {
                         // Override with protocol v7 or lower when using this deprecated method
                         connectOptions: connectOptions.protocolVersion >= .v8 ? connectOptions.copyWith(protocolVersion: .v7) : connectOptions,
                         roomOptions: roomOptions)
-
+        
         return room.connect(url, token)
     }
 }
