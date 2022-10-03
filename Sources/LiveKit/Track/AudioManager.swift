@@ -85,6 +85,10 @@ public class AudioManager: Loggable {
                 DispatchQueue.webRTC.async {
                     self.refreshAudioPort()
                 }
+            case .oldDeviceUnavailable:
+                DispatchQueue.webRTC.async {
+                    self.refreshAudioPort()
+                }
             default: break
             }
         }
