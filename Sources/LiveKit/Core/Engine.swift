@@ -376,7 +376,7 @@ private extension Engine {
             }
     }
 
-    @discardableResult
+   @discardableResult
     func startReconnect() -> Promise<Void> {
 
         guard case .connected = _state.connectionState else {
@@ -398,20 +398,25 @@ private extension Engine {
         func quickReconnectSequence() -> Promise<Void> {
 
             log("[reconnect] starting QUICK reconnect sequence...")
-            // return Promise(EngineError.state(message: "DEBUG"))
+
+            // this should never happen since Engine is owned by Room
+            guard let room = self.room else { return Promise(EngineError.state(message: "Room is nil")) }
 
             return self.signalClient.connect(url,
                                              token,
-                                             connectOptions: self.connectOptions,
-                                             reconnectMode: self._state.reconnectMode,
-                                             adaptiveStream: self.roomOptions.adaptiveStream).then(on: .sdk) {
+                                             connectOptions: _state.connectOptions,
+                                             reconnectMode: _state.reconnectMode,
+                                             adaptiveStream: room._state.options.adaptiveStream).then(on: queue) {
 
                                                 self.log("[reconnect] waiting for socket to connect...")
                                                 // Wait for primary transport to connect (if not already)
-                                                self._state.mutate { $0.primaryTransportConnectedCompleter.wait(on: .sdk,
+                                                self._state.mutate { $0.primaryTransportConnectedCompleter.wait(on: self.queue,
                                                                                                                 .defaultTransportState,
                                                                                                                 throw: { TransportError.timedOut(message: "primary transport didn't connect") }) }
-                                             }.then(on: .sdk) { () -> Promise<Void> in
+                                             }.then(on: queue) {
+                                                // send SyncState before offer
+                                                self.sendSyncState()
+                                             }.then(on: queue) { () -> Promise<Void> in
 
                                                 self.subscriber?.restartingIce = true
 
@@ -422,77 +427,19 @@ private extension Engine {
 
                                                 self.log("[reconnect] waiting for publisher to connect...")
 
-                                                return publisher.createAndSendOffer(iceRestart: true).then(on: .sdk) {
-                                                    self._state.mutate { $0.publisherTransportConnectedCompleter.wait(on: .sdk,
+                                                return publisher.createAndSendOffer(iceRestart: true).then(on: self.queue) {
+                                                    self._state.mutate { $0.publisherTransportConnectedCompleter.wait(on: self.queue,
                                                                                                                       .defaultTransportState,
                                                                                                                       throw: { TransportError.timedOut(message: "publisher transport didn't connect") }) }
                                                 }
 
-                                             }.then(on: .sdk) { () -> Promise<Void> in
+                                             }.then(on: queue) { () -> Promise<Void> in
 
                                                 self.log("[reconnect] send queued requests")
                                                 // always check if there are queued requests
                                                 return self.signalClient.sendQueuedRequests()
                                              }
         }
-
-        // "full" re-connection sequence
-        // as a last resort, try to do a clean re-connection and re-publish existing tracks
-        func fullReconnectSequence() -> Promise<Void> {
-
-            log("[reconnect] starting FULL reconnect sequence...")
-
-            return self.cleanUp(isFullReconnect: true).then(on: .sdk) { () -> Promise<Void> in
-
-                guard let url = self._state.url,
-                      let token = self._state.token else {
-                    throw EngineError.state(message: "url or token is nil")
-                }
-
-                return self.fullConnectSequence(url, token)
-            }
-        }
-
-        return retry(on: .sdk,
-                     attempts: 3,
-                     delay: .defaultQuickReconnectRetry,
-                     condition: { [weak self] triesLeft, _ in
-                        guard let self = self else { return false }
-
-                        guard case .reconnecting = self._state.connectionState else {
-                            // not reconnecting state anymore
-                            return false
-                        }
-
-                        if self._state.reconnectMode == .full {
-                            // full reconnect failed, give up
-                            return false
-                        }
-
-                        self.log("[reconnect] retry in \(TimeInterval.defaultQuickReconnectRetry) seconds, \(triesLeft) tries left...")
-                        // only retry if still reconnecting state (not disconnected)
-                        return true
-                     }, _: { [weak self] in
-                        guard let self = self else { return Promise(()) }
-
-                        self._state.mutate {
-                            $0.connectionState = .reconnecting
-                            $0.reconnectMode = ($0.nextPreferredReconnectMode == .full || $0.reconnectMode == .full) ? .full : .quick
-                            $0.nextPreferredReconnectMode = nil
-                        }
-
-                        return self._state.reconnectMode == .full ? fullReconnectSequence() : quickReconnectSequence()
-
-                     })
-            .then(on: .sdk) {
-                // re-connect sequence successful
-                self.log("[reconnect] sequence completed")
-                self._state.mutate { $0.connectionState = .connected }
-            }.catch(on: .sdk) { error in
-                self.log("[reconnect] sequence failed with error: \(error)")
-                // finally disconnect if all attempts fail
-                self.cleanUp(reason: .networkError(error))
-            }
     }
 
 }
@@ -506,6 +453,48 @@ internal extension Engine {
         [publisherDataChannel(for: .lossy), publisherDataChannel(for: .reliable)]
             .compactMap { $0 }
             .map { $0.toLKInfoType() }
+    }
+
+    func sendSyncState() -> Promise<Void> {
+
+        guard let room = room else {
+            // this should never happen
+            log("Room is nil", .error)
+            return Promise(())
+        }
+
+        guard let subscriber = subscriber,
+              let previousAnswer = subscriber.localDescription else {
+            // No-op
+            return Promise(())
+        }
+
+        let previousOffer = subscriber.remoteDescription
+
+        // 1. autosubscribe on, so subscribed tracks = all tracks - unsub tracks,
+        //    in this case, we send unsub tracks, so server add all tracks to this
+        //    subscribe pc and unsub special tracks from it.
+        // 2. autosubscribe off, we send subscribed tracks.
+        let autoSubscribe = _state.connectOptions.autoSubscribe
+        let trackSids = room._state.remoteParticipants.values.flatMap { participant in
+            participant._state.tracks.values
+                .filter { $0.subscribed != autoSubscribe }
+                .map { $0.sid }
+        }
+
+        log("trackSids: \(trackSids)")
+
+        let subscription = Livekit_UpdateSubscription.with {
+            $0.trackSids = trackSids
+            $0.participantTracks = []
+            $0.subscribe = !autoSubscribe
+        }
+
+        return signalClient.sendSyncState(answer: previousAnswer.toPBType(),
+                                          offer: previousOffer?.toPBType(),
+                                          subscription: subscription,
+                                          publishTracks: room._state.localParticipant?.publishedTracksInfo(),
+                                          dataChannels: dataChannelInfo())
     }
 }
 

@@ -250,41 +250,6 @@ internal extension Room {
             publication.resetTrackSettings()
         }
     }
-
-    func sendSyncState() -> Promise<Void> {
-
-        guard let subscriber = engine.subscriber,
-              let localDescription = subscriber.localDescription else {
-            // No-op
-            return Promise(())
-        }
-
-        let sendUnSub = engine.connectOptions.autoSubscribe
-        let participantTracks = _state.remoteParticipants.values.map { participant in
-            Livekit_ParticipantTracks.with {
-                $0.participantSid = participant.sid
-                $0.trackSids = participant._state.tracks.values
-                    .filter { $0.subscribed != sendUnSub }
-                    .map { $0.sid }
-            }
-        }
-
-        // Backward compatibility
-        let trackSids = participantTracks.map { $0.trackSids }.flatMap { $0 }
-
-        log("trackSids: \(trackSids)")
-
-        let subscription = Livekit_UpdateSubscription.with {
-            $0.trackSids = trackSids // Deprecated
-            $0.participantTracks = participantTracks
-            $0.subscribe = !sendUnSub
-        }
-
-        return engine.signalClient.sendSyncState(answer: localDescription.toPBType(),
-                                                 subscription: subscription,
-                                                 publishTracks: _state.localParticipant?.publishedTracksInfo(),
-                                                 dataChannels: engine.dataChannelInfo())
-    }
 }
 
 // MARK: - SignalClientDelegate
@@ -529,11 +494,6 @@ extension Room: EngineDelegate {
 
             // only if quick-reconnect
             if case .connected = state.connectionState, case .quick = state.reconnectMode {
-
-                sendSyncState().catch(on: .sdk) { error in
-                    self.log("Failed to sendSyncState, error: \(error)", .error)
-                }
-
                 resetTrackSettings()
             }
 

@@ -559,6 +559,7 @@ internal extension SignalClient {
     }
 
     func sendSyncState(answer: Livekit_SessionDescription,
+                        offer: Livekit_SessionDescription?,
                        subscription: Livekit_UpdateSubscription,
                        publishTracks: [Livekit_TrackPublishedResponse]? = nil,
                        dataChannels: [Livekit_DataChannelInfo]? = nil) -> Promise<Void> {
@@ -567,6 +568,9 @@ internal extension SignalClient {
         let r = Livekit_SignalRequest.with {
             $0.syncState = Livekit_SyncState.with {
                 $0.answer = answer
+                if let offer = offer {
+                    $0.offer = offer
+                }
                 $0.subscription = subscription
                 $0.publishTracks = publishTracks ?? []
                 $0.dataChannels = dataChannels ?? []
