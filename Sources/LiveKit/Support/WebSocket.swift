@@ -16,85 +16,42 @@
 
 import Foundation
 import Promises
+import Starscream
 
-internal class WebSocket: NSObject, URLSessionWebSocketDelegate, Loggable {
-
+internal class SocketClient: NSObject, Loggable {
     private let queue = DispatchQueue(label: "LiveKitSDK.webSocket", qos: .default)
-
-    typealias OnMessage = (URLSessionWebSocketTask.Message) -> Void
+    typealias OnMessage = (Any) -> Void
     typealias OnDisconnect = (_ reason: DisconnectReason?) -> Void
-
+    
     public var onMessage: OnMessage?
     public var onDisconnect: OnDisconnect?
 
-    private let operationQueue = OperationQueue()
+    private let webSocket: WebSocket
     private let request: URLRequest
+    
+    private var connectPromise: Promise<SocketClient>?
 
-    private var disconnected = false
-    private var connectPromise: Promise<WebSocket>?
-
-    private lazy var session: URLSession = {
-        let config = URLSessionConfiguration.default
-        // explicitly set timeout intervals
-        config.timeoutIntervalForRequest = TimeInterval(60)
-        config.timeoutIntervalForResource = TimeInterval(604_800)
-        log("URLSessionConfiguration.timeoutIntervalForRequest: \(config.timeoutIntervalForRequest)")
-        log("URLSessionConfiguration.timeoutIntervalForResource: \(config.timeoutIntervalForResource)")
-        return URLSession(configuration: config,
-                          delegate: self,
-                          delegateQueue: operationQueue)
-    }()
-
-    private lazy var task: URLSessionWebSocketTask = {
-        session.webSocketTask(with: request)
-    }()
-
-    static func connect(url: URL,
-                        onMessage: OnMessage? = nil,
-                        onDisconnect: OnDisconnect? = nil) -> Promise<WebSocket> {
-
-        return WebSocket(url: url,
-                         onMessage: onMessage,
-                         onDisconnect: onDisconnect).connect()
-    }
-
-    private init(url: URL,
+    init(url: URL,
                  onMessage: OnMessage? = nil,
                  onDisconnect: OnDisconnect? = nil) {
 
-        request = URLRequest(url: url,
-                             cachePolicy: .useProtocolCachePolicy,
-                             timeoutInterval: .defaultSocketConnect)
-
+        request = URLRequest(url: url)
+        self.webSocket = .init(request: request)
         self.onMessage = onMessage
         self.onDisconnect = onDisconnect
         super.init()
-        task.resume()
+        self.webSocket.delegate = self
     }
 
-    deinit {
-        log()
-    }
-
-    private func connect() -> Promise<WebSocket> {
-        connectPromise = Promise<WebSocket>.pending()
+    func connect() -> Promise<SocketClient> {
+        connectPromise = .pending()
+        webSocket.connect()
         return connectPromise!
     }
 
     internal func cleanUp(reason: DisconnectReason?) {
 
         log("reason: \(String(describing: reason))")
-
-        guard !disconnected else {
-            log("dispose can be called only once", .warning)
-            return
-        }
-
-        // mark as disconnected, this instance cannot be re-used
-        disconnected = true
-
-        task.cancel()
-        session.invalidateAndCancel()
 
         if let promise = connectPromise {
             let sdkError = NetworkError.disconnected(message: "WebSocket disconnected")
@@ -106,72 +63,35 @@ internal class WebSocket: NSObject, URLSessionWebSocketDelegate, Loggable {
     }
 
     public func send(data: Data) -> Promise<Void> {
-        let message = URLSessionWebSocketTask.Message.data(data)
         return Promise(on: queue) { resolve, fail in
-            self.task.send(message) { error in
-                if let error = error {
-                    fail(error)
-                    return
-                }
+            self.webSocket.write(data: data) {
                 resolve(())
             }
         }
     }
+}
 
-    private func receive(task: URLSessionWebSocketTask,
-                         result: Result<URLSessionWebSocketTask.Message, Error>) {
-        switch result {
-        case .failure(let error):
-            log("Failed to receive \(error)", .error)
+extension SocketClient: WebSocketDelegate {
+    func websocketDidConnect(socket: WebSocketClient) {
+        connectPromise?.fulfill(self)
+        print("DID CONNECTED")
+    }
+    func websocketDidDisconnect(socket: WebSocketClient, error: Error?) {
+        if let error = error {
+            let err = error as NSError
+            let sdkError = NetworkError.disconnected(message: "WebSocket did close with code: \(err.code) reason: \(String(describing: err.localizedDescription))")
 
-        case .success(let message):
-            onMessage?(message)
-            queue.async { task.receive { self.receive(task: task, result: $0) } }
+            cleanUp(reason: .networkError(sdkError))
+        } else {
+            let error = NetworkError.disconnected(message: "WebSocket DidDisconnect")
+            cleanUp(reason: .networkError(error))
         }
     }
-
-    // MARK: - URLSessionWebSocketDelegate
-
-    internal func urlSession(_ session: URLSession,
-                             webSocketTask: URLSessionWebSocketTask,
-                             didOpenWithProtocol protocol: String?) {
-
-        guard !disconnected else {
-            return
-        }
-
-        if let promise = connectPromise {
-            promise.fulfill(self)
-            connectPromise = nil
-        }
-
-        queue.async { webSocketTask.receive { self.receive(task: webSocketTask, result: $0) } }
+    func websocketDidReceiveMessage(socket: WebSocketClient, text: String) {
+        onMessage?(text)
     }
-
-    internal func urlSession(_ session: URLSession,
-                             webSocketTask: URLSessionWebSocketTask,
-                             didCloseWith closeCode: URLSessionWebSocketTask.CloseCode,
-                             reason: Data?) {
-
-        guard !disconnected else {
-            return
-        }
-
-        let sdkError = NetworkError.disconnected(message: "WebSocket did close with code: \(closeCode) reason: \(String(describing: reason))")
-
-        cleanUp(reason: .networkError(sdkError))
-    }
-
-    internal func urlSession(_ session: URLSession,
-                             task: URLSessionTask,
-                             didCompleteWithError error: Error?) {
-
-        guard !disconnected else {
-            return
-        }
-
-        let sdkError = NetworkError.disconnected(message: "WebSocket disconnected", rawError: error)
-
-        cleanUp(reason: .networkError(sdkError))
+    func websocketDidReceiveData(socket: WebSocketClient, data: Data) {
+        onMessage?(data)
     }
 }
+

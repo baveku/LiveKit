@@ -98,16 +98,19 @@ internal class Utils {
 
     internal static func networkTypeString() -> String? {
         // wifi, wired, cellular, vpn, empty if not known
-        guard let interface = ConnectivityListener.shared.activeInterfaceType() else {
-            return nil
+        if #available(iOS 12.0, *) {
+            guard let interface = ConnectivityListener.shared.activeInterfaceType() else {
+                return nil
+            }
+            
+            switch interface {
+            case .wifi: return "wifi"
+            case .cellular: return "cellular"
+            case .wiredEthernet: return "wired"
+            default: return nil
+            }
         }
-
-        switch interface {
-        case .wifi: return "wifi"
-        case .cellular: return "cellular"
-        case .wiredEthernet: return "wired"
-        default: return nil
-        }
+        return nil
     }
 
     internal static func buildUrl(

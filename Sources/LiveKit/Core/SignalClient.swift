@@ -17,6 +17,7 @@
 import Foundation
 import Promises
 import WebRTC
+import Starscream
 
 internal class SignalClient: MulticastDelegate<SignalClientDelegate> {
 
@@ -53,7 +54,7 @@ internal class SignalClient: MulticastDelegate<SignalClientDelegate> {
 
     private var responseQueueState: QueueState = .resumed
 
-    private var webSocket: WebSocket?
+    private var webSocket: SocketClient?
     private var latestJoinResponse: Livekit_JoinResponse?
 
     init() {
@@ -97,20 +98,20 @@ internal class SignalClient: MulticastDelegate<SignalClientDelegate> {
             .catch(on: queue) { error in
                 self.log("Failed to parse rtc url", .error)
             }
-            .then(on: queue) { url -> Promise<WebSocket> in
-                self.log("Connecting with url: \(url)")
-                self._state.mutate {
-                    $0.reconnectMode = reconnectMode
-                    $0.connectionState = .connecting
-                }
-                return WebSocket.connect(url: url,
-                                         onMessage: self.onWebSocketMessage,
-                                         onDisconnect: { reason in
-                                            self.webSocket = nil
-                                            self.cleanUp(reason: reason)
-                                         })
-            }.then(on: queue) { (webSocket: WebSocket) -> Void in
-                self.webSocket = webSocket
+            .then(on: queue) { url -> Promise<SocketClient> in
+            self.log("Connecting with url: \(url)")
+            self._state.mutate {
+                $0.reconnectMode = reconnectMode
+                $0.connectionState = .connecting
+            }
+            self.webSocket = SocketClient(url: url,
+                                          onMessage: self.onWebSocketMessage,
+                                          onDisconnect: { reason in
+                self.webSocket = nil
+                self.cleanUp(reason: reason)
+            })
+                return self.webSocket!.connect()
+            }.then(on: queue) { (webSocket: SocketClient) -> Void in
                 self._state.mutate { $0.connectionState = .connected }
             }.recover(on: queue) { error -> Promise<Void> in
                 // Skip validation if reconnect mode
@@ -243,21 +244,21 @@ private extension SignalClient {
         }
     }
 
-    func onWebSocketMessage(message: URLSessionWebSocketTask.Message) {
+    func onWebSocketMessage(message: Any) {
 
         var response: Livekit_SignalResponse?
-
-        if case .data(let data) = message {
+        
+        if let data = message as? Data {
             response = try? Livekit_SignalResponse(contiguousBytes: data)
-        } else if case .string(let string) = message {
+        } else if let string = message as? String {
             response = try? Livekit_SignalResponse(jsonString: string)
         }
-
+        
         guard let response = response else {
             log("Failed to decode SignalResponse", .warning)
             return
         }
-
+        
         responseDispatchQueue.async {
             if case .suspended = self.responseQueueState {
                 self.log("Enqueueing response: \(response)")
