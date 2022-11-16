@@ -85,7 +85,13 @@ public class AudioManager: Loggable {
 
             switch reason {
             case .newDeviceAvailable:
-                self.log("newDeviceAvailable")
+                DispatchQueue.webRTC.async {
+                    self.refreshAudioPort()
+                }
+            case .oldDeviceUnavailable:
+                DispatchQueue.webRTC.async {
+                    self.refreshAudioPort()
+                }
             default: break
             }
         }
@@ -212,6 +218,19 @@ public class AudioManager: Loggable {
             } catch let error {
                 self.log("Failed to overrideOutputAudioPort with error: \(error)", .error)
             }
+
+            if newState.trackState != .none {
+                self.refreshAudioPort()
+            }
+        }
+    }
+
+    func refreshAudioPort() {
+        let session = RTCAudioSession.sharedInstance()
+        do {
+            try session.overrideOutputAudioPort(preferSpeakerOutput && !AVAudioSession.isHeadphonesConnected ? .speaker : .none)
+        } catch let error {
+            self.log("Failed to overrideOutputAudioPort with error: \(error)", .error)
         }
     }
     #endif
@@ -230,5 +249,22 @@ extension AudioManager.State {
         }
 
         return .none
+    }
+}
+
+extension AVAudioSession {
+
+    static var isHeadphonesConnected: Bool {
+        return sharedInstance().isHeadphonesConnected
+    }
+
+    var isHeadphonesConnected: Bool {
+        return !currentRoute.outputs.filter { $0.isHeadphones }.isEmpty
+    }
+}
+
+extension AVAudioSessionPortDescription {
+    var isHeadphones: Bool {
+        return portType == .headphones || portType == .bluetoothHFP || portType == .bluetoothA2DP || portType == .bluetoothLE
     }
 }
