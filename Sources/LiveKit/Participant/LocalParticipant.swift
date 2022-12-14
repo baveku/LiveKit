@@ -472,8 +472,8 @@ extension LocalParticipant {
                 if _trackPublishState[.camera] == nil {
                     _trackPublishState[.camera] = .creating
                     let localTrack: LocalVideoTrack = LocalVideoTrack.createCameraTrack(options: room._state.options.defaultCameraCaptureOptions)
-                    return publishVideoTrack(track: localTrack).then(on: queue) { pub in
-                        _trackPublishState[.camera] = nil
+                    return publishVideoTrack(track: localTrack).then(on: queue) { [weak self] pub in
+                        self?._trackPublishState[.camera] = nil
                         return pub
                     }
                 } else {
@@ -483,8 +483,8 @@ extension LocalParticipant {
                 if _trackPublishState[.microphone] == nil {
                     _trackPublishState[.microphone] = .creating
                     let localTrack: LocalAudioTrack = LocalAudioTrack.createTrack(options: room._state.options.defaultAudioCaptureOptions)
-                    return publishAudioTrack(track: localTrack).then(on: queue) { pub in
-                        _trackPublishState[.microphone] = nil
+                    return publishAudioTrack(track: localTrack).then(on: queue) { [weak self] pub in
+                        self?._trackPublishState[.microphone] = nil
                         return pub
                     }
                 } else {
