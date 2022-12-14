@@ -27,6 +27,7 @@ public class LocalParticipant: Participant {
     @objc
     public var localVideoTracks: [LocalTrackPublication] { videoTracks.compactMap { $0 as? LocalTrackPublication } }
 
+    private var _trackPublishState: [Track.Source: LocalTrackPublishState] = [:]
     private var allParticipantsAllowed: Bool = true
     private var trackPermissions: [ParticipantTrackPermission] = []
 
@@ -192,6 +193,7 @@ public class LocalParticipant: Participant {
 
     public override func unpublishAll(notify _notify: Bool = true) -> Promise<Void> {
         // build a list of promises
+        _trackPublishState.removeAll()
         let promises = _state.tracks.values.compactMap { $0 as? LocalTrackPublication }
             .map { unpublish(publication: $0, notify: _notify) }
         // combine promises to wait all to complete
@@ -201,7 +203,9 @@ public class LocalParticipant: Participant {
     /// unpublish an existing published track
     /// this will also stop the track
     public func unpublish(publication: LocalTrackPublication, notify _notify: Bool = true) -> Promise<Void> {
-
+        if let track = publication._state.track {
+            _trackPublishState[track.source] = nil
+        }
         func notifyDidUnpublish() -> Promise<Void> {
 
             Promise<Void>(on: queue) {
@@ -459,11 +463,27 @@ extension LocalParticipant {
         } else if enabled {
             // try to create a new track
             if source == .camera {
-                let localTrack = LocalVideoTrack.createCameraTrack(options: room._state.options.defaultCameraCaptureOptions)
-                return publishVideoTrack(track: localTrack).then(on: queue) { $0 }
+                if _trackPublishState[.camera] == nil {
+                    _trackPublishState[.camera] = .creating
+                    let localTrack: LocalVideoTrack = LocalVideoTrack.createCameraTrack(options: room._state.options.defaultCameraCaptureOptions)
+                    return publishVideoTrack(track: localTrack).then(on: queue) { pub in
+                        _trackPublishState[.camera] = nil
+                        return pub
+                    }
+                } else {
+                    return Promise(nil)
+                }
             } else if source == .microphone {
-                let localTrack = LocalAudioTrack.createTrack(options: room._state.options.defaultAudioCaptureOptions)
-                return publishAudioTrack(track: localTrack).then(on: queue) { $0 }
+                if _trackPublishState[.microphone] == nil {
+                    _trackPublishState[.microphone] = .creating
+                    let localTrack = LocalAudioTrack.createTrack(options: room._state.options.defaultAudioCaptureOptions)
+                    return publishAudioTrack(track: localTrack).then(on: queue) { pub in
+                        _trackPublishState[.microphone] = nil
+                        return pub
+                    }
+                } else {
+                    return Promise(nil)
+                }
             } else if source == .screenShareVideo {
                 #if os(iOS)
                 var localTrack: LocalVideoTrack?
