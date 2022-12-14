@@ -18,11 +18,19 @@ import WebRTC
 import Promises
 import ReplayKit
 
+enum LocalTrackPublishState {
+    case publishing
+    case creating
+    case none
+}
+
 public class LocalParticipant: Participant {
 
     public var localAudioTracks: [LocalTrackPublication] { audioTracks.compactMap { $0 as? LocalTrackPublication } }
     public var localVideoTracks: [LocalTrackPublication] { videoTracks.compactMap { $0 as? LocalTrackPublication } }
-
+    
+    private var _trackPublishState: [Track.Source: LocalTrackPublishState] = [:]
+    
     private var allParticipantsAllowed: Bool = true
     private var trackPermissions: [ParticipantTrackPermission] = []
 
@@ -43,7 +51,6 @@ public class LocalParticipant: Participant {
 
     internal func publish(track: LocalTrack,
                           publishOptions: PublishOptions? = nil) -> Promise<LocalTrackPublication> {
-
         log("[publish] \(track) options: \(String(describing: publishOptions ?? nil))...", .info)
 
         guard let publisher = room.engine.publisher else {
@@ -143,10 +150,8 @@ public class LocalParticipant: Participant {
             transceiver.sender.parameters = params
 
             self.room.engine.publisherShouldNegotiate()
-
             let publication = LocalTrackPublication(info: trackInfo, track: track, participant: self)
             self.addTrack(publication: publication)
-
             // notify didPublish
             self.notify(label: { "localParticipant.didPublish \(publication)" }) {
                 $0.localParticipant(self, didPublish: publication)
@@ -185,6 +190,7 @@ public class LocalParticipant: Participant {
 
     public override func unpublishAll(notify _notify: Bool = true) -> Promise<Void> {
         // build a list of promises
+        _trackPublishState.removeAll()
         let promises = _state.tracks.values.compactMap { $0 as? LocalTrackPublication }
             .map { unpublish(publication: $0, notify: _notify) }
         // combine promises to wait all to complete
@@ -398,7 +404,7 @@ extension LocalParticipant {
         let mediaTracks = _state.tracks.values.map { $0.track }.compactMap { $0 }
 
         return unpublishAll().then(on: .sdk) { () -> Promise<Void> in
-
+            
             let promises = mediaTracks.map { track -> Promise<LocalTrackPublication>? in
                 guard let track = track as? LocalTrack else { return nil }
                 return self.publish(track: track, publishOptions: track.publishOptions)
@@ -447,11 +453,27 @@ extension LocalParticipant {
         } else if enabled {
             // try to create a new track
             if source == .camera {
-                let localTrack = LocalVideoTrack.createCameraTrack(options: room.options.defaultCameraCaptureOptions)
-                return publishVideoTrack(track: localTrack).then(on: .sdk) { return $0 }
+                if _trackPublishState[.camera] == nil {
+                    _trackPublishState[.camera] = .creating
+                    let localTrack = LocalVideoTrack.createCameraTrack(options: room.options.defaultCameraCaptureOptions)
+                    return publishVideoTrack(track: localTrack).then(on: .sdk) { pub in
+                        self._trackPublishState[.camera] = nil
+                        return pub
+                    }
+                } else {
+                    return Promise(nil)
+                }
             } else if source == .microphone {
-                let localTrack = LocalAudioTrack.createTrack(options: room.options.defaultAudioCaptureOptions)
-                return publishAudioTrack(track: localTrack).then(on: .sdk) { return $0 }
+                if _trackPublishState[.microphone] == nil {
+                    _trackPublishState[.microphone] = .creating
+                    let localTrack = LocalAudioTrack.createTrack(options: room.options.defaultAudioCaptureOptions)
+                    return publishAudioTrack(track: localTrack).then(on: .sdk) { pub in
+                        self._trackPublishState[.microphone] = nil
+                        return pub
+                    }
+                } else {
+                    return Promise(nil)
+                }
             } else if source == .screenShareVideo {
                 var localTrack: LocalVideoTrack?
 
