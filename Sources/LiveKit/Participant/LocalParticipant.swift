@@ -18,6 +18,12 @@ import WebRTC
 import Promises
 import ReplayKit
 
+enum LocalTrackPublishState {
+    case publishing
+    case creating
+    case none
+}
+
 @objc
 public class LocalParticipant: Participant {
 
@@ -476,7 +482,7 @@ extension LocalParticipant {
             } else if source == .microphone {
                 if _trackPublishState[.microphone] == nil {
                     _trackPublishState[.microphone] = .creating
-                    let localTrack = LocalAudioTrack.createTrack(options: room._state.options.defaultAudioCaptureOptions)
+                    let localTrack: LocalAudioTrack = LocalAudioTrack.createTrack(options: room._state.options.defaultAudioCaptureOptions)
                     return publishAudioTrack(track: localTrack).then(on: queue) { pub in
                         _trackPublishState[.microphone] = nil
                         return pub
@@ -489,8 +495,7 @@ extension LocalParticipant {
                 var localTrack: LocalVideoTrack?
                 let options = room._state.options.defaultScreenShareCaptureOptions
                 if options.useBroadcastExtension {
-                    
-                        let screenShareExtensionId = Bundle.main.infoDictionary?[BroadcastScreenCapturer.kRTCScreenSharingExtension] as? String
+                    let screenShareExtensionId = Bundle.main.infoDictionary?[BroadcastScreenCapturer.kRTCScreenSharingExtension] as? String
                     if #available(iOS 12, *) {
                         RPSystemBroadcastPickerView.show(for: screenShareExtensionId,
                                                          showsMicrophoneButton: false)
