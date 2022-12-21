@@ -212,16 +212,7 @@ public class AudioManager: Loggable {
                 self.log("Failed to configureAudioSession with error: \(error)", .error)
             }
 
-            do {
-                self.log("preferSpeakerOutput: \(newState.preferSpeakerOutput)")
-                try session.overrideOutputAudioPort(newState.preferSpeakerOutput ? .speaker : .none)
-            } catch let error {
-                self.log("Failed to overrideOutputAudioPort with error: \(error)", .error)
-            }
-
-            if newState.trackState != .none {
-                self.refreshAudioPort()
-            }
+            self.refreshAudioPort()
         }
     }
 
