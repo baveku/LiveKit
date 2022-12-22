@@ -163,25 +163,29 @@ public class AudioManager: Loggable {
             let configuration = RTCAudioSessionConfiguration.webRTC()
             var categoryOptions: AVAudioSession.CategoryOptions = []
 
-            switch newState.trackState {
-            case .remoteOnly:
+            if newState.trackState == .remoteOnly && self.preferSpeakerOutput {
                 configuration.category = AVAudioSession.Category.playback.rawValue
                 configuration.mode = AVAudioSession.Mode.spokenAudio.rawValue
-                categoryOptions = [.allowBluetooth, .allowBluetoothA2DP]
-                configuration.categoryOptions = categoryOptions
-            case  .localOnly, .localAndRemote:
+            } else if [.localOnly, .localAndRemote].contains(newState.trackState) ||
+                        (newState.trackState == .remoteOnly && !newState.preferSpeakerOutput) {
+                
                 configuration.category = AVAudioSession.Category.playAndRecord.rawValue
-                configuration.mode = AVAudioSession.Mode.videoChat.rawValue
-                categoryOptions = [.allowBluetooth, .allowBluetoothA2DP]
-                if newState.preferSpeakerOutput {
-                    categoryOptions.insert(.defaultToSpeaker)
+                if self.preferSpeakerOutput {
+                    // use .videoChat if speakerOutput is preferred
+                    configuration.mode = AVAudioSession.Mode.videoChat.rawValue
+                } else {
+                    // use .voiceChat if speakerOutput is not preferred
+                    configuration.mode = AVAudioSession.Mode.voiceChat.rawValue
                 }
-
-                configuration.categoryOptions = categoryOptions
-            default:
+                
+                categoryOptions = [.allowBluetooth, .allowBluetoothA2DP]
+                
+            } else {
                 configuration.category = AVAudioSession.Category.soloAmbient.rawValue
                 configuration.mode = AVAudioSession.Mode.default.rawValue
             }
+            
+            configuration.categoryOptions = categoryOptions
 
             var setActive: Bool?
             if newState.trackState != .none, oldState.trackState == .none {
@@ -209,10 +213,6 @@ public class AudioManager: Loggable {
 
             } catch let error {
                 self.log("Failed to configureAudioSession with error: \(error)", .error)
-            }
-            
-            if newState.trackState != .none {
-                self.refreshAudioPort()
             }
         }
     }
