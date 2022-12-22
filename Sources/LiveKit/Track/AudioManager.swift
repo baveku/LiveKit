@@ -168,10 +168,6 @@ public class AudioManager: Loggable {
                 configuration.category = AVAudioSession.Category.playback.rawValue
                 configuration.mode = AVAudioSession.Mode.spokenAudio.rawValue
                 categoryOptions = [.allowBluetooth, .allowBluetoothA2DP]
-                if newState.preferSpeakerOutput {
-                    categoryOptions.insert(.defaultToSpeaker)
-                }
-
                 configuration.categoryOptions = categoryOptions
             case  .localOnly, .localAndRemote:
                 configuration.category = AVAudioSession.Category.playAndRecord.rawValue
