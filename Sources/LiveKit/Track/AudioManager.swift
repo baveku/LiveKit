@@ -166,21 +166,26 @@ public class AudioManager: Loggable {
             switch newState.trackState {
             case .remoteOnly:
                 configuration.category = AVAudioSession.Category.playback.rawValue
-                configuration.mode = AVAudioSession.Mode.spokenAudio.rawValue
+                configuration.mode = AVAudioSession.Mode.voiceChat.rawValue
+                categoryOptions = [.allowBluetooth, .allowBluetoothA2DP]
+                if newState.preferSpeakerOutput {
+                    categoryOptions.insert(.defaultToSpeaker)
+                }
+
+                configuration.categoryOptions = categoryOptions
             case  .localOnly, .localAndRemote:
                 configuration.category = AVAudioSession.Category.playAndRecord.rawValue
                 configuration.mode = AVAudioSession.Mode.videoChat.rawValue
+                categoryOptions = [.allowBluetooth, .allowBluetoothA2DP]
+                if newState.preferSpeakerOutput {
+                    categoryOptions.insert(.defaultToSpeaker)
+                }
+
+                configuration.categoryOptions = categoryOptions
             default:
                 configuration.category = AVAudioSession.Category.soloAmbient.rawValue
                 configuration.mode = AVAudioSession.Mode.default.rawValue
             }
-            
-            categoryOptions = [.allowBluetooth, .allowBluetoothA2DP, .allowAirPlay]
-            if newState.preferSpeakerOutput {
-                categoryOptions.insert(.defaultToSpeaker)
-            }
-
-            configuration.categoryOptions = categoryOptions
 
             var setActive: Bool?
             if newState.trackState != .none, oldState.trackState == .none {
@@ -196,7 +201,7 @@ public class AudioManager: Loggable {
             session.lockForConfiguration()
             // always unlock
             defer { session.unlockForConfiguration() }
-
+            
             do {
                 self.log("configuring audio session with category: \(configuration.category), mode: \(configuration.mode), setActive: \(String(describing: setActive))")
 
@@ -209,8 +214,10 @@ public class AudioManager: Loggable {
             } catch let error {
                 self.log("Failed to configureAudioSession with error: \(error)", .error)
             }
-
-            self.refreshAudioPort()
+            
+            if newState.trackState != .none {
+                self.refreshAudioPort()
+            }
         }
     }
 
