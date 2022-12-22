@@ -1,5 +1,3 @@
-
-
 /*
  * Copyright 2022 LiveKit
  *
@@ -23,9 +21,8 @@ import WebRTC
 public class AudioManager: Loggable {
 
     // MARK: - Public
+
     public static let shared = AudioManager()
-    
-    public var preferSpeakerOutput: Bool = true
 
     public typealias ConfigureAudioSessionFunc = (_ newState: State,
                                                   _ oldState: State) -> Void
@@ -44,20 +41,26 @@ public class AudioManager: Loggable {
     public struct State {
         var localTracksCount: Int = 0
         var remoteTracksCount: Int = 0
+        var preferSpeakerOutput: Bool = false
     }
 
     public var localTracksCount: Int { _state.localTracksCount }
     public var remoteTracksCount: Int { _state.remoteTracksCount }
+    public var preferSpeakerOutput: Bool {
+        get { _state.preferSpeakerOutput }
+        set { _state.mutate { $0.preferSpeakerOutput = newValue } }
+    }
 
     // MARK: - Internal
+
     internal enum `Type` {
         case local
         case remote
     }
 
     // MARK: - Private
+
     private var _state = StateSync(State())
-    private var _isActive = false
 
     #if os(iOS)
     private let notificationQueue = OperationQueue()
@@ -96,7 +99,7 @@ public class AudioManager: Loggable {
 
         // trigger events when state mutates
         _state.onMutate = { [weak self] newState, oldState in
-            guard let self = self, self._isActive else { return }
+            guard let self = self else { return }
             self.configureAudioSession(newState: newState, oldState: oldState)
         }
     }
@@ -131,7 +134,9 @@ public class AudioManager: Loggable {
         log("\(oldState) -> \(newState)")
 
         #if os(iOS)
-        if let customConfigureAudioSessionFunc = customConfigureAudioSessionFunc {
+        if let _deprecatedFunc = LiveKit.onShouldConfigureAudioSession {
+            _deprecatedFunc(newState.trackState, oldState.trackState)
+        } else if let customConfigureAudioSessionFunc = customConfigureAudioSessionFunc {
             customConfigureAudioSessionFunc(newState, oldState)
         } else {
             defaultConfigureAudioSessionFunc(newState: newState, oldState: oldState)
@@ -149,9 +154,9 @@ public class AudioManager: Loggable {
     ///   - configuration: A configured RTCAudioSessionConfiguration
     ///   - setActive: passing true/false will call `AVAudioSession.setActive` internally
     public func defaultConfigureAudioSessionFunc(newState: State, oldState: State) {
-        guard _isActive else {return}
+
         DispatchQueue.webRTC.async { [weak self] in
-            
+
             guard let self = self else { return }
 
             // prepare config
@@ -161,23 +166,26 @@ public class AudioManager: Loggable {
             switch newState.trackState {
             case .remoteOnly:
                 configuration.category = AVAudioSession.Category.playback.rawValue
-                configuration.mode = AVAudioSession.Mode.spokenAudio.rawValue
-            case  .localOnly, .localAndRemote:
-                configuration.category = AVAudioSession.Category.playAndRecord.rawValue
-                configuration.mode = AVAudioSession.Mode.videoChat.rawValue
-
+                configuration.mode = AVAudioSession.Mode.default.rawValue
                 categoryOptions = [.allowBluetooth, .allowBluetoothA2DP]
-
                 if newState.preferSpeakerOutput {
                     categoryOptions.insert(.defaultToSpeaker)
                 }
 
+                configuration.categoryOptions = categoryOptions
+            case  .localOnly, .localAndRemote:
+                configuration.category = AVAudioSession.Category.playAndRecord.rawValue
+                configuration.mode = AVAudioSession.Mode.videoChat.rawValue
+                categoryOptions = [.allowBluetooth, .allowBluetoothA2DP]
+                if newState.preferSpeakerOutput {
+                    categoryOptions.insert(.defaultToSpeaker)
+                }
+
+                configuration.categoryOptions = categoryOptions
             default:
                 configuration.category = AVAudioSession.Category.soloAmbient.rawValue
                 configuration.mode = AVAudioSession.Mode.default.rawValue
             }
-
-            configuration.categoryOptions = categoryOptions
 
             var setActive: Bool?
             if newState.trackState != .none, oldState.trackState == .none {
@@ -193,7 +201,7 @@ public class AudioManager: Loggable {
             session.lockForConfiguration()
             // always unlock
             defer { session.unlockForConfiguration() }
-
+            
             do {
                 self.log("configuring audio session with category: \(configuration.category), mode: \(configuration.mode), setActive: \(String(describing: setActive))")
 
@@ -206,23 +214,14 @@ public class AudioManager: Loggable {
             } catch let error {
                 self.log("Failed to configureAudioSession with error: \(error)", .error)
             }
-
-            do {
-                self.log("preferSpeakerOutput: \(newState.preferSpeakerOutput)")
-                try session.overrideOutputAudioPort(newState.preferSpeakerOutput ? .speaker : .none)
-            } catch let error {
-                self.log("Failed to overrideOutputAudioPort with error: \(error)", .error)
-            }
-
+            
             if newState.trackState != .none {
                 self.refreshAudioPort()
             }
         }
     }
-    #endif
-    
+
     func refreshAudioPort() {
-        guard _isActive else {return}
         let session = RTCAudioSession.sharedInstance()
         do {
             try session.overrideOutputAudioPort(preferSpeakerOutput && !AVAudioSession.isHeadphonesConnected ? .speaker : .none)
@@ -230,50 +229,7 @@ public class AudioManager: Loggable {
             self.log("Failed to overrideOutputAudioPort with error: \(error)", .error)
         }
     }
-    
-    func startMonitoring() {
-        DispatchQueue.webRTC.async {
-            // prepare config
-            let configuration = RTCAudioSessionConfiguration.webRTC()
-            var categoryOptions: AVAudioSession.CategoryOptions = []
-            configuration.category = AVAudioSession.Category.playAndRecord.rawValue
-            categoryOptions = [.allowBluetooth, .allowBluetoothA2DP, .allowAirPlay]
-            if self.preferSpeakerOutput {
-                categoryOptions.insert(.defaultToSpeaker)
-            }
-            let session = RTCAudioSession.sharedInstance()
-            session.lockForConfiguration()
-            do {
-                try session.setConfiguration(configuration, active: true)
-            } catch let error {
-                self.log("Failed to configureAudioSession with error: \(error)", .error)
-            }
-            session.unlockForConfiguration()
-        }
-        _isActive = true
-    }
-    
-    func stopMonitoring() {
-        _isActive = false
-        deactivateRTCAudioSession()
-    }
-    
-    func deactivateRTCAudioSession() {
-        self._state.mutateAsync { state in
-            state.localTracksCount = 0
-            state.remoteTracksCount = 0
-        }
-        DispatchQueue.webRTC.async {
-            let session = RTCAudioSession.sharedInstance()
-            session.lockForConfiguration()
-            do {
-                try session.setActive(false)
-            } catch let error {
-                self.log("Failed to deactivateSession with error: \(error)", .error)
-            }
-            session.unlockForConfiguration()
-        }
-    }
+    #endif
 }
 
 extension AudioManager.State {

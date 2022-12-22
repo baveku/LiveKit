@@ -23,6 +23,8 @@ public class LocalParticipant: Participant {
     public var localAudioTracks: [LocalTrackPublication] { audioTracks.compactMap { $0 as? LocalTrackPublication } }
     public var localVideoTracks: [LocalTrackPublication] { videoTracks.compactMap { $0 as? LocalTrackPublication } }
 
+    private var isAudioPublishing = false
+
     private var allParticipantsAllowed: Bool = true
     private var trackPermissions: [ParticipantTrackPermission] = []
 
@@ -450,8 +452,13 @@ extension LocalParticipant {
                 let localTrack = LocalVideoTrack.createCameraTrack(options: room.options.defaultCameraCaptureOptions)
                 return publishVideoTrack(track: localTrack).then(on: .sdk) { return $0 }
             } else if source == .microphone {
-                let localTrack = LocalAudioTrack.createTrack(options: room.options.defaultAudioCaptureOptions)
-                return publishAudioTrack(track: localTrack).then(on: .sdk) { return $0 }
+                if !isAudioPublishing {
+                    isAudioPublishing = true
+                    let localTrack = LocalAudioTrack.createTrack(options: room.options.defaultAudioCaptureOptions)
+                    return publishAudioTrack(track: localTrack).then(on: .sdk) { return $0 }
+                } else {
+                    
+                }
             } else if source == .screenShareVideo {
                 var localTrack: LocalVideoTrack?
 
