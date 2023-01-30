@@ -12,3 +12,4 @@ WebRTC.xcframework
 DerivedData
 Pods
 Podfile.lock
+.swiftpm
