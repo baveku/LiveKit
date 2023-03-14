@@ -23,7 +23,7 @@ public class Participant: NSObject, Loggable {
 
     // MARK: - MulticastDelegate
 
-    private var delegates = MulticastDelegate<ParticipantDelegate>()
+    internal var delegates = MulticastDelegate<ParticipantDelegate>()
 
     internal let queue = DispatchQueue(label: "LiveKitSDK.participant", qos: .default)
 

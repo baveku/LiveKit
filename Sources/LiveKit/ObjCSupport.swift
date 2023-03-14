@@ -28,18 +28,6 @@ public enum ConnectionStateObjC: Int {
     case connected
 }
 
-extension ConnectionState {
-
-    func toObjCType() -> ConnectionStateObjC {
-        switch self {
-        case .disconnected: return .disconnected
-        case .connecting: return .connecting
-        case .reconnecting: return .reconnecting
-        case .connected: return .connected
-        }
-    }
-}
-
 extension Room {
 
     @objc(connectWithURL:token:connectOptions:roomOptions:)

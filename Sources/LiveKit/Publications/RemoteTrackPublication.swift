@@ -100,64 +100,67 @@ public class RemoteTrackPublication: TrackPublication {
     @discardableResult
     public func set(enabled newValue: Bool) -> Promise<Void> {
         // no-op if already the desired value
-        guard _state.trackSettings.enabled != newValue else { return Promise(()) }
-
+        let trackSettings = _state.trackSettings
+        guard trackSettings.enabled != newValue else { return Promise(()) }
         guard userCanModifyTrackSettings else { return Promise(TrackError.state(message: "adaptiveStream must be disabled and track must be subscribed")) }
 
-        // keep old settings
-        let oldSettings = _state.trackSettings
-        // update state
-        _state.mutate { $0.trackSettings = $0.trackSettings.copyWith(enabled: newValue) }
+        let settings = trackSettings.copyWith(enabled: newValue)
         // attempt to set the new settings
-        return send(trackSettings: _state.trackSettings).catch(on: queue) { [weak self] error in
-
-            guard let self = self else { return }
-
-            // revert track settings on failure
-            self._state.mutate { $0.trackSettings = oldSettings }
-
-            self.log("failed to update enabled: \(newValue), sid: \(self.sid), error: \(error)")
-        }
+        return send(trackSettings: settings)
+    }
+    
+    /// Set preferred video FPS for this track.
+    @discardableResult
+    public func set(preferredFPS newValue: UInt) -> Promise<Void> {
+        // no-op if already the desired value
+        let trackSettings = _state.trackSettings
+        guard trackSettings.preferredFPS != newValue else { return Promise(()) }
+        
+        guard userCanModifyTrackSettings else { return Promise(TrackError.state(message: "adaptiveStream must be disabled and track must be subscribed")) }
+        
+        let settings = trackSettings.copyWith(preferredFPS: newValue)
+        // attempt to set the new settings
+        return send(trackSettings: settings)
     }
 
     @discardableResult
     internal override func set(track newValue: Track?) -> Track? {
-
+        
         log("RemoteTrackPublication set track: \(String(describing: track))")
-
+        
         let oldValue = super.set(track: newValue)
         if newValue != oldValue {
             // always suspend adaptiveStream timer first
             asTimer.suspend()
-
+            
             if let newValue = newValue {
-
+                
                 // reset track settings, track is initially disabled only if adaptive stream and is a video track
                 resetTrackSettings()
-
+                
                 log("[adaptiveStream] did reset trackSettings: \(_state.trackSettings), kind: \(newValue.kind)")
-
+                
                 // start adaptiveStream timer only if it's a video track
                 if isAdaptiveStreamEnabled {
                     asTimer.restart()
                 }
-
+                
                 // if new Track has been set to this RemoteTrackPublication,
                 // update the Track's muted state from the latest info.
                 newValue.set(muted: metadataMuted,
                              notify: false)
             }
-
+            
             if let oldValue = oldValue, newValue == nil, let participant = participant as? RemoteParticipant {
-                participant.notify(label: { "participant.didUnsubscribe \(self)" }) {
+                participant.delegates.notify(label: { "participant.didUnsubscribe \(self)" }) {
                     $0.participant?(participant, didUnsubscribe: self, track: oldValue)
                 }
-                participant.room.notify(label: { "room.didUnsubscribe \(self)" }) {
+                participant.room.delegates.notify(label: { "room.didUnsubscribe \(self)" }) {
                     $0.room?(participant.room, participant: participant, didUnsubscribe: self, track: oldValue)
                 }
             }
         }
-
+        
         return oldValue
     }
 }

@@ -24,7 +24,7 @@ public class Room: NSObject, Loggable {
 
     // MARK: - MulticastDelegate
 
-    private var delegates = MulticastDelegate<RoomDelegateObjC>()
+    internal var delegates = MulticastDelegate<RoomDelegateObjC>()
 
     internal let queue = DispatchQueue(label: "LiveKitSDK.room", qos: .default)
 
@@ -189,7 +189,8 @@ public class Room: NSObject, Loggable {
 
         return engine.signalClient.sendLeave()
             .recover(on: queue) { self.log("Failed to send leave, error: \($0)") }
-            .then(on: queue) {
+            .then(on: queue) { [weak self] in
+                guard let self = self else { return }
                 self.cleanUp(reason: .user)
             }
     }
@@ -342,18 +343,18 @@ internal extension Room {
 
 extension Room: SignalClientDelegate {
 
-    func signalClient(_ signalClient: SignalClient, didReceiveLeave canReconnect: Bool) -> Bool {
-
-        log("canReconnect: \(canReconnect)")
-
+    func signalClient(_ signalClient: SignalClient, didReceiveLeave canReconnect: Bool, reason: Livekit_DisconnectReason) -> Bool {
+        
+        log("canReconnect: \(canReconnect), reason: \(reason)")
+        
         if canReconnect {
             // force .full for next reconnect
             engine._state.mutate { $0.nextPreferredReconnectMode = .full }
         } else {
             // server indicates it's not recoverable
-            cleanUp(reason: .networkError(NetworkError.disconnected(message: "did receive leave")))
+            cleanUp(reason: reason.toLKType())
         }
-
+        
         return true
     }
 
