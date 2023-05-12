@@ -31,6 +31,8 @@ internal let logger = Logger(label: "LiveKitSDK")
 ///
 /// Download the [Multiplatform SwiftUI Example](https://github.com/livekit/multiplatform-swiftui-example)
 /// to try out the features.
+
+public typealias LiveRoom = Room
 @objc
 public class LiveKit: NSObject {
 
